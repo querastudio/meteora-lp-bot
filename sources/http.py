@@ -1,0 +1,133 @@
+"""
+sources/http.py — Klien HTTP bersama: retry + backoff eksponensial + rate limit.
+
+Semua modul source memakai fungsi ini supaya perilaku jaringan konsisten:
+  - timeout jelas (biar cron 5 menit tak nyangkut),
+  - retry pada error transien (5xx / 429 / timeout) dengan backoff,
+  - throttle sederhana per-host (menghormati rate limit gratis).
+
+Sengaja dibuat ringan (pakai requests) — cukup untuk beban GitHub Actions.
+"""
+
+import logging
+import threading
+import time
+from typing import Any, Dict, Optional
+
+import requests
+
+import config
+
+log = logging.getLogger("http")
+
+# Session global (reuse koneksi TCP => lebih cepat di runner).
+_session = requests.Session()
+_session.headers.update({"User-Agent": "meteora-lp-bot/1.0 (+github-actions)"})
+
+# Throttle per-host: simpan timestamp request terakhir agar tak menembak beruntun.
+_last_call_lock = threading.Lock()
+_last_call: Dict[str, float] = {}
+# Jeda minimal antar-call per host (detik). Dexscreener ~300/min => ~0.2s aman.
+_MIN_INTERVAL = {
+    "api.dexscreener.com": 0.25,
+    "dlmm-api.meteora.ag": 0.2,
+    "mainnet.helius-rpc.com": 0.15,
+    "trends.google.com": 1.0,
+    "www.googleapis.com": 0.2,
+    "news.google.com": 0.5,
+}
+
+
+def _throttle(host: str) -> None:
+    """Tahan sebentar bila call ke host ini terlalu rapat dengan sebelumnya."""
+    interval = _MIN_INTERVAL.get(host, 0.1)
+    with _last_call_lock:
+        now = time.monotonic()
+        prev = _last_call.get(host, 0.0)
+        wait = interval - (now - prev)
+        if wait > 0:
+            time.sleep(wait)
+        _last_call[host] = time.monotonic()
+
+
+def _host_of(url: str) -> str:
+    try:
+        return url.split("/")[2]
+    except IndexError:
+        return url
+
+
+def request_json(
+    method: str,
+    url: str,
+    *,
+    params: Optional[Dict[str, Any]] = None,
+    json_body: Optional[Dict[str, Any]] = None,
+    headers: Optional[Dict[str, str]] = None,
+    timeout: Optional[int] = None,
+    max_retries: Optional[int] = None,
+) -> Optional[Any]:
+    """
+    Lakukan request dan kembalikan JSON (dict/list) atau None bila gagal permanen.
+
+    JANGAN pernah melempar exception ke pemanggil — return None supaya pipeline
+    bisa degrade gracefully (satu API mati != seluruh run crash).
+    """
+    timeout = timeout or config.HTTP_TIMEOUT
+    max_retries = max_retries if max_retries is not None else config.HTTP_MAX_RETRIES
+    host = _host_of(url)
+
+    for attempt in range(max_retries + 1):
+        _throttle(host)
+        try:
+            resp = _session.request(
+                method,
+                url,
+                params=params,
+                json=json_body,
+                headers=headers,
+                timeout=timeout,
+            )
+        except requests.RequestException as e:
+            log.warning("HTTP %s %s gagal (attempt %d): %s", method, host, attempt, e)
+            _sleep_backoff(attempt)
+            continue
+
+        # Rate limited / server error => retry dengan backoff.
+        if resp.status_code in (429, 500, 502, 503, 504):
+            log.warning("HTTP %s %s -> %d (attempt %d)", method, host, resp.status_code, attempt)
+            # Hormati Retry-After bila ada.
+            retry_after = resp.headers.get("Retry-After")
+            if retry_after and retry_after.isdigit():
+                time.sleep(min(int(retry_after), 30))
+            else:
+                _sleep_backoff(attempt)
+            continue
+
+        if resp.status_code >= 400:
+            # Error klien (4xx selain 429) biasanya permanen => jangan retry.
+            log.info("HTTP %s %s -> %d (tidak di-retry)", method, host, resp.status_code)
+            return None
+
+        try:
+            return resp.json()
+        except ValueError:
+            log.warning("Respon non-JSON dari %s", host)
+            return None
+
+    log.warning("HTTP %s %s menyerah setelah %d percobaan", method, host, max_retries + 1)
+    return None
+
+
+def _sleep_backoff(attempt: int) -> None:
+    """Backoff eksponensial: base^attempt (1.5, 2.25, 3.375, ...) detik."""
+    delay = config.HTTP_BACKOFF_BASE ** attempt
+    time.sleep(min(delay, 30))
+
+
+def get_json(url: str, **kwargs) -> Optional[Any]:
+    return request_json("GET", url, **kwargs)
+
+
+def post_json(url: str, **kwargs) -> Optional[Any]:
+    return request_json("POST", url, **kwargs)

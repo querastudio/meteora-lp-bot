@@ -1,0 +1,6 @@
+# Dependency minimal — semua ringan agar cron GitHub Actions cepat.
+requests>=2.31.0
+
+# Stage 7 (narasi). Opsional: kalau NARRATIVE_ENABLED=false, ini tak dipakai.
+# pytrends kadang rapuh (endpoint Google unofficial) -> dibungkus try/except.
+pytrends>=4.9.2

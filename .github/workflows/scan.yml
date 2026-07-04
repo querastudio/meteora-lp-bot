@@ -1,0 +1,66 @@
+name: Meteora LP Screening
+
+# Jalan otomatis tiap ~5 menit (cron GitHub Actions; kadang delay saat sibuk).
+# Bisa juga dipicu manual dari tab Actions (workflow_dispatch).
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+# Cegah run tumpang tindih: kalau run sebelumnya belum selesai, run baru menunggu
+# (bukan membatalkan) supaya penulisan state tak korup / bertabrakan.
+concurrency:
+  group: meteora-scan
+  cancel-in-progress: false
+
+permissions:
+  contents: write   # perlu untuk commit balik state_data.json
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10   # jaring pengaman: jangan sampai run nyangkut
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install deps
+        run: pip install -r requirements.txt
+
+      - name: Run screening
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          HELIUS_API_KEY: ${{ secrets.HELIUS_API_KEY }}
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          # Override threshold/bobot lewat repo Variables bila mau (opsional):
+          NARRATIVE_ENABLED: ${{ vars.NARRATIVE_ENABLED || 'true' }}
+        run: python main.py
+
+      - name: Commit state (anti-duplikat + riwayat ATH)
+        # Simpan state antar-run dengan commit balik ke repo. Pakai [skip ci]
+        # supaya commit ini TIDAK memicu workflow lagi (hindari loop).
+        run: |
+          git config user.name "meteora-bot"
+          git config user.email "bot@users.noreply.github.com"
+          if [[ -n "$(git status --porcelain state_data.json)" ]]; then
+            git add state_data.json
+            git commit -m "chore(state): update ATH & notif history [skip ci]"
+            # Rebase-aman terhadap run paralel, lalu push dengan retry ringan.
+            for i in 1 2 3; do
+              git pull --rebase --autostash origin ${{ github.ref_name }} || true
+              if git push origin HEAD:${{ github.ref_name }}; then
+                echo "state pushed"; break
+              fi
+              echo "push gagal, retry $i"; sleep $((i*3))
+            done
+          else
+            echo "state tidak berubah, tak ada commit"
+          fi

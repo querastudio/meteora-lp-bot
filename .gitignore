@@ -1,0 +1,23 @@
+# Secrets — JANGAN pernah commit
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+env/
+.pytest_cache/
+
+# State file lokal saat DRY_RUN / testing (di CI, state_data.json memang di-commit
+# oleh workflow; baris di bawah hanya melindungi file sementara/backup lokal).
+state_data.json.tmp
+*.local.json
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
