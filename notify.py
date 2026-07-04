@@ -178,6 +178,19 @@ def format_message(ctx: Dict[str, Any]) -> str:
         for insight in nar.get("insights", [])[:3]:
             lines.append(f"  💡 {html.escape(insight)}")
 
+        # Konteks: kutipan ASLI (bukan karangan) dari post/artikel paling relevan
+        # -- ini "penjelasan mengenai tokennya" (siapa/apa yg dibahas), diambil
+        # dari data nyata, bukan sinopsis otomatis yang bisa salah/mengarang.
+        evidence = nar.get("evidence", [])
+        if evidence:
+            lines.append("─ <b>Konteks</b> (kutipan asli):")
+            for ev in evidence:
+                src_txt = html.escape(ev["source"])
+                if ev.get("url"):
+                    lines.append(f"  📝 {_link(ev['text'], ev['url'])} — <i>{src_txt}</i>")
+                else:
+                    lines.append(f"  📝 {html.escape(ev['text'])} — <i>{src_txt}</i>")
+
         # X (Twitter) tak bisa di-API gratis -> sisipkan link cashtag & community
         # langsung di blok narasi (bukan cuma di baris link bawah) supaya user
         # cek "vibe" manual sebagai bagian dari due diligence narasi, bukan afterthought.

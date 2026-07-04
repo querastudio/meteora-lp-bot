@@ -14,7 +14,7 @@ Prinsip: cepat, idempoten, degrade gracefully. Satu API mati != run crash.
 
 import logging
 import sys
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import config
 import notify
@@ -29,6 +29,28 @@ logging.basicConfig(
     datefmt="%H:%M:%S",
 )
 log = logging.getLogger("main")
+
+
+def _sanity_check_ath(gt_ath: Optional[float], price_now: float, symbol: str) -> Optional[float]:
+    """
+    Validasi ATH GeckoTerminal sebelum dipercaya. Kalau rasio thd harga sekarang
+    tak masuk akal (mis. base/quote candle tertukar, atau pool salah terindeks),
+    ABAIKAN -> return None (fallback ke riwayat state sendiri).
+
+    Memecoin wajar bisa turun drastis dari puncak (>99%), jadi cap-nya dibuat
+    longgar (rasio hingga 50.000x) -- yang dicurigai cuma kasus EKSTREM yang
+    biasanya berarti data salah, bukan drawdown asli sekeras apa pun.
+    """
+    if gt_ath is None or gt_ath <= 0 or price_now <= 0:
+        return None
+    ratio = gt_ath / price_now
+    if ratio > 50_000:
+        log.info(
+            "GeckoTerminal ATH $%s tampak tak wajar (%.0fx harga sekarang) utk $%s -> diabaikan",
+            f"{gt_ath:.8f}", ratio, symbol,
+        )
+        return None
+    return gt_ath
 
 
 def run() -> int:
@@ -84,9 +106,12 @@ def _process_candidate(pool: Dict[str, Any], st: Dict[str, Any], sol_price: floa
     symbol = metrics["symbol"]
     # ATH sungguhan (candle OHLCV GeckoTerminal, ~6 bulan riwayat) -- degrade
     # gracefully ke None kalau pool belum terindeks / API gagal.
-    gt_ath = geckoterminal.get_pool_ath(pool["address"])
-    # Catat harga & ambil ATH-baseline SEBELUM update (gabungan state + GeckoTerminal).
-    prev_ath = state_mod.record_price(st, mint, metrics["price_usd"], symbol, external_ath_hint=gt_ath or 0.0)
+    gt_ath_raw = geckoterminal.get_pool_ath(pool["address"])
+    gt_ath = _sanity_check_ath(gt_ath_raw, metrics["price_usd"], symbol)
+    # Catat harga & ambil ATH-baseline SEBELUM update. GeckoTerminal (kalau valid)
+    # DIPERCAYA sbg sumber otoritatif -- lihat state.record_price kenapa ini
+    # penting (state sendiri bisa "keracunan" bacaan harga keliru di masa lalu).
+    prev_ath = state_mod.record_price(st, mint, metrics["price_usd"], symbol, external_ath_hint=gt_ath)
 
     ok2, reasons2, ath_info = hard_filters.stage2_token(metrics, prev_ath)
     ath_info["source"] = "GeckoTerminal (riwayat lengkap)" if gt_ath else "proxy sejak bot mengamati"

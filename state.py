@@ -29,7 +29,7 @@ import json
 import logging
 import os
 import time
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import config
 
@@ -76,24 +76,29 @@ def record_price(
     mint: str,
     price: float,
     symbol: str = "",
-    external_ath_hint: float = 0.0,
+    external_ath_hint: Optional[float] = None,
 ) -> float:
     """
     Catat harga terbaru; update ATH. Return ATH-baseline SEBELUM update harga
     sekarang (dipakai Stage 2 utk cek proximity/making-new-ATH).
 
     external_ath_hint: ATH sungguhan dari sumber luar (GeckoTerminal OHLCV,
-    lihat sources/geckoterminal.py) yang mencakup riwayat SEBELUM bot mulai
-    mengamati token ini. Kalau lebih tinggi dari ATH yang sudah tercatat di
-    state, kita adopsi sbg baseline baru -- supaya Stage 2 tak keliru
-    menganggap harga rendah sbg "ATH baru" hanya karena bot baru mulai lihat
-    token ini (lihat README bagian keterbatasan ATH).
+    lihat sources/geckoterminal.py). PENTING: kalau tersedia, ini DIPERCAYA
+    SEBAGAI SUMBER OTORITATIF (menimpa, bukan cuma "diambil yang lebih tinggi"
+    dari riwayat state) -- karena riwayat state sendiri bersifat akumulatif
+    permanen, satu bacaan harga yang keliru/glitch di masa lalu (mis. salah
+    pilih pair) bisa "terpatri" selamanya dan terus memblokir token yang
+    sebenarnya sudah benar. GeckoTerminal (sumber luar independen) dipakai utk
+    "menyembuhkan" state yang mungkin sudah tercemar. Kalau hint tak tersedia
+    (None), baru fallback ke riwayat state sendiri sbg baseline.
     """
     tok = state["tokens"].setdefault(
         mint, {"ath": 0.0, "price_history": [], "symbol": symbol}
     )
-    # Baseline ATH = maksimum dari yang sudah tercatat vs hint eksternal.
-    prev_ath = max(float(tok.get("ath", 0.0)), float(external_ath_hint or 0.0))
+    if external_ath_hint is not None and external_ath_hint > 0:
+        prev_ath = float(external_ath_hint)
+    else:
+        prev_ath = float(tok.get("ath", 0.0))
     tok["ath"] = prev_ath
 
     hist: List[float] = tok.get("price_history", [])

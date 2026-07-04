@@ -190,6 +190,7 @@ def reddit_signal(keyword: str) -> Dict[str, Any]:
         "total_comments": 0,
         "subreddit_count": 0,
         "posts_last24h": 0,
+        "top_posts": [],  # konteks kualitatif: judul post ter-upvote (lihat notify.py)
     }
     if not config.REDDIT_ENABLED or not keyword:
         return out
@@ -217,16 +218,33 @@ def reddit_signal(keyword: str) -> Dict[str, Any]:
         total_score = 0
         total_comments = 0
         posts_24h = 0
+        posts_raw: List[Dict[str, Any]] = []
         for c in children:
             d = c.get("data") or {}
             sub = d.get("subreddit")
             if sub:
                 subreddits[sub] += 1
-            total_score += int(d.get("score", 0) or 0)
+            score = int(d.get("score", 0) or 0)
+            total_score += score
             total_comments += int(d.get("num_comments", 0) or 0)
             created = d.get("created_utc")
             if created and (now - float(created)) <= 86400:
                 posts_24h += 1
+            title = d.get("title")
+            if title:
+                posts_raw.append(
+                    {
+                        "title": title,
+                        "score": score,
+                        "subreddit": sub or "?",
+                        "url": f"https://www.reddit.com{d.get('permalink', '')}",
+                    }
+                )
+
+        # Konteks kualitatif: 2 post PALING banyak upvote (bukan cuma terbaru)
+        # -- ini yang dipakai notify.py utk kasih "penjelasan mengenai token".
+        posts_raw.sort(key=lambda p: p["score"], reverse=True)
+        out["top_posts"] = posts_raw[:2]
 
         out.update(
             {
@@ -247,8 +265,8 @@ def reddit_signal(keyword: str) -> Dict[str, Any]:
 # Google News RSS (gratis, no key) — artikel + diversitas domain sumber
 # ---------------------------------------------------------------------------
 def google_news_signal(keyword: str) -> Dict[str, Any]:
-    """Return { available, article_count, domain_count }."""
-    out = {"available": False, "article_count": 0, "domain_count": 0}
+    """Return { available, article_count, domain_count, top_articles }."""
+    out = {"available": False, "article_count": 0, "domain_count": 0, "top_articles": []}
     if not keyword:
         return out
     try:
@@ -259,15 +277,34 @@ def google_news_signal(keyword: str) -> Dict[str, Any]:
         root = ET.fromstring(resp.content)
         items = root.findall(".//item")
         domains = set()
+        articles: List[Dict[str, Any]] = []
         for it in items:
             src = it.find("source")
+            source_name = src.text if src is not None and src.text else "?"
             if src is not None and src.get("url"):
                 try:
                     domains.add(urlparse(src.get("url")).netloc)
                 except ValueError:
                     pass
+            title_el = it.find("title")
+            link_el = it.find("link")
+            if title_el is not None and title_el.text:
+                articles.append(
+                    {
+                        "title": title_el.text,
+                        "source": source_name,
+                        "url": link_el.text if link_el is not None else "",
+                    }
+                )
         out.update(
-            {"available": True, "article_count": len(items), "domain_count": len(domains)}
+            {
+                "available": True,
+                "article_count": len(items),
+                "domain_count": len(domains),
+                # Google News RSS sudah terurut relevansi -> ambil 2 teratas
+                # sbg konteks kualitatif (dipakai notify.py).
+                "top_articles": articles[:2],
+            }
         )
     except Exception as e:  # noqa: BLE001
         log.info("Google News gagal utk '%s': %s (degrade)", keyword, e)
@@ -303,7 +340,7 @@ def evaluate_narrative(name: str, symbol: str) -> Dict[str, Any]:
         "category": "n/a", "keyword": symbol, "score": 0.0,
         "viral_label": "OFF", "durability_label": "OFF",
         "breadth_score": 0.0, "volume_score": 0.0, "diversity_score": 0.0,
-        "durability_score": 0.0, "insights": [],
+        "durability_score": 0.0, "insights": [], "evidence": [],
         "trends": {}, "youtube": {}, "reddit": {}, "news": {},
     }
     if not config.NARRATIVE_ENABLED:
@@ -405,6 +442,17 @@ def evaluate_narrative(name: str, symbol: str) -> Dict[str, Any]:
     if trends.get("available") and not trends.get("sustained"):
         insights.append("Google Trends sudah turun jauh dari puncak -- minat mereda")
 
+    # --- Evidence: kutipan NYATA (bukan karangan) sbg "penjelasan mengenai
+    # tokennya" -- judul post/artikel asli yg paling relevan, biar user tahu
+    # KONTEKS narasinya (mis. "siapa yg bahas, tentang apa"), bukan cuma angka.
+    evidence: List[Dict[str, str]] = []
+    for p in reddit.get("top_posts", []):
+        evidence.append(
+            {"text": p["title"], "source": f"Reddit r/{p['subreddit']} ({p['score']} upvote)", "url": p["url"]}
+        )
+    for a in news.get("top_articles", []):
+        evidence.append({"text": a["title"], "source": f"News: {a['source']}", "url": a["url"]})
+
     return {
         "category": category,
         "keyword": keyword,
@@ -416,6 +464,7 @@ def evaluate_narrative(name: str, symbol: str) -> Dict[str, Any]:
         "diversity_score": round(diversity_score, 2),
         "durability_score": round(durability_score, 2),
         "insights": insights,
+        "evidence": evidence[:3],
         "trends": trends,
         "youtube": youtube,
         "reddit": reddit,

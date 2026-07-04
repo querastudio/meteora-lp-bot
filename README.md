@@ -179,7 +179,12 @@ siap-klik** di tiap notifikasi untuk verifikasi manual:
   Skor dipecah 2 sumbu: **Viralitas** (breadth lintas platform + volume mentah +
   diversitas komunitas) dan **Daya Tahan** (masih hidup setelah beberapa hari vs
   cuma spike sesaat) — lihat `sources/narrative.py` untuk formulanya, semua
-  threshold/cap bisa dituning di `config.py`.
+  threshold/cap bisa dituning di `config.py`. Notifikasi juga menampilkan
+  **"Konteks"**: kutipan ASLI (judul post Reddit ter-upvote / artikel berita)
+  supaya user tahu SIAPA/APA yang dibahas (mis. "ANSEM confirms airdrop wave 2"),
+  bukan cuma angka. Ini kutipan nyata dari sumber, BUKAN ringkasan otomatis
+  buatan bot — kalau tak ada post/artikel yang relevan, kolom ini kosong (bot
+  tak mengarang cerita).
 - **Bin occupancy & konsentrasi LP granular per-bin** → data per-bin tak tersedia
   gratis-stabil → diestimasi dari rasio vol/TVL dan ditandai `(est)`.
 
