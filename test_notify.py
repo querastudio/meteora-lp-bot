@@ -32,7 +32,9 @@ def build_sample_ctx() -> dict:
     sec = {"mint_authority": None, "freeze_authority": None, "transfer_fee_bps": 0}
     hold = {
         "available": True, "top10_pct": 21.4, "top10_gate_pass": True,
-        "fresh_count": 2, "largest_cluster_pct": 12.5, "largest_cluster_wallets": 3,
+        "inspected_count": 20, "fresh_pct": 15.0, "empty_pct": 10.0, "young_pct": 20.0,
+        "coordination_label": "WAJAR",
+        "largest_cluster_pct": 12.5, "largest_cluster_wallets": 3,
         "cluster_gate_pass": True,
     }
     lp = {

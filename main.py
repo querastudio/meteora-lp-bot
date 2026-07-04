@@ -159,6 +159,12 @@ def _process_candidate(pool: Dict[str, Any], st: Dict[str, Any], sol_price: floa
             symbol, hold["largest_cluster_pct"], config.MAX_CLUSTER_SUPPLY_PCT, hold["largest_cluster_wallets"],
         )
         return False
+    if hold.get("available") and hold.get("coordination_label") == "TINGGI":
+        log.info(
+            "S4 gugur $%s: indikasi KUAT coordinated trading (%.0f%% fresh, %.0f%% saldo rendah, %.0f%% umur muda di top%d)",
+            symbol, hold.get("fresh_pct", 0), hold.get("empty_pct", 0), hold.get("young_pct", 0), hold.get("inspected_count", 0),
+        )
+        return False
     if not hold.get("available"):
         warnings.append("distribusi holder tak terverifikasi")
     if hold.get("note"):

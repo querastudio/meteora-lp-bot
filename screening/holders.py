@@ -21,6 +21,7 @@ Return dict skor 0-1 utk holder_health + flag utk notif.
 """
 
 import logging
+import time
 from typing import Any, Dict, List
 
 import config
@@ -76,9 +77,15 @@ def analyze(mint: str, sol_price: float) -> Dict[str, Any]:
         "available": False,
         "top10_pct": 0.0,
         "top10_gate_pass": False,
+        "inspected_count": 0,
         "fresh_count": 0,
+        "fresh_pct": 0.0,
         "empty_count": 0,
+        "empty_pct": 0.0,
+        "young_count": 0,          # umur wallet < WALLET_YOUNG_AGE_HOURS
+        "young_pct": 0.0,
         "suspicious_pct": 0.0,
+        "coordination_label": "n/a",   # "TINGGI"/"SEDANG"/"WAJAR" -- indikasi bundling/wash trading
         "largest_cluster_pct": 0.0,
         "largest_cluster_wallets": 0,
         "cluster_gate_pass": True,
@@ -98,11 +105,15 @@ def analyze(mint: str, sol_price: float) -> Dict[str, Any]:
     out["top10_pct"] = round(top10_pct, 1)
     out["top10_gate_pass"] = top10_pct < config.MAX_TOP10_SUPPLY_PCT
 
-    # Heuristik top 20: fresh wallet + wallet kosong + data utk cluster.
+    # Heuristik top 20: fresh wallet + wallet kosong + umur wallet + data cluster.
+    # (Sample top20, bukan top100 -- top100 penuh butuh ~5x panggilan Helius
+    # lebih banyak & berisiko rate-limit/lambat utk cron 5 menit. Lihat README.)
     inspect = holders[: config.TOP_N_HOLDERS_INSPECT]
     fresh = 0
     empty = 0
+    young = 0
     inspected = 0
+    now_ts = time.time()
     wallets_for_cluster: List[Dict[str, Any]] = []
     for h in inspect:
         owner = helius.get_token_account_owner(h["token_account"]) if h.get("token_account") else None
@@ -115,17 +126,35 @@ def analyze(mint: str, sol_price: float) -> Dict[str, Any]:
         bal = helius.get_sol_balance_usd(owner, sol_price)
         if bal is not None and bal < config.EMPTY_WALLET_SOL_USD:
             empty += 1
-        wallets_for_cluster.append({"pct": h["pct"], "earliest_seen_ts": act.get("earliest_seen_ts")})
+        earliest_ts = act.get("earliest_seen_ts")
+        if earliest_ts is not None and (now_ts - earliest_ts) / 3600.0 < config.WALLET_YOUNG_AGE_HOURS:
+            young += 1
+        wallets_for_cluster.append({"pct": h["pct"], "earliest_seen_ts": earliest_ts})
 
+    denom = max(inspected, 1)
+    out["inspected_count"] = inspected
     out["fresh_count"] = fresh
+    out["fresh_pct"] = round(fresh / denom * 100.0, 1)
     out["empty_count"] = empty
+    out["empty_pct"] = round(empty / denom * 100.0, 1)
+    out["young_count"] = young
+    out["young_pct"] = round(young / denom * 100.0, 1)
 
     # Wallet dianggap "mencurigakan" bila fresh ATAU kosong (union kasar).
-    # Proporsi vs jumlah yang berhasil diinspeksi.
     suspicious = max(fresh, empty)  # konservatif: jangan double count agresif
-    denom = max(inspected, 1)
     suspicious_pct = suspicious / denom * 100.0
     out["suspicious_pct"] = round(suspicious_pct, 1)
+
+    # Label "coordinated trading": rata-rata fresh%/empty%/young% seragam TINGGI
+    # di top20 -> indikasi kuat bundling/wash trading (banyak wallet dibuat &
+    # diisi minim bareng-bareng, bukan distribusi organik).
+    avg_signal = (out["fresh_pct"] + out["empty_pct"] + out["young_pct"]) / 3.0
+    if avg_signal >= config.COORDINATION_HIGH_PCT:
+        out["coordination_label"] = "TINGGI"
+    elif avg_signal >= config.COORDINATION_MED_PCT:
+        out["coordination_label"] = "SEDANG"
+    else:
+        out["coordination_label"] = "WAJAR"
 
     # HARD GATE: cluster/bundle terbesar (proxy waktu pembuatan wallet).
     clusters = _cluster_by_time(wallets_for_cluster, config.CLUSTER_TIME_WINDOW_SECONDS)
@@ -144,7 +173,13 @@ def analyze(mint: str, sol_price: float) -> Dict[str, Any]:
     out["health_score"] = round(max(base, 0.0), 2)
 
     notes = []
-    if suspicious_pct > config.SUSPICIOUS_TOP20_PCT_THRESHOLD:
+    if out["coordination_label"] == "TINGGI":
+        notes.append(
+            f"indikasi KUAT bundling/wash trading: {out['fresh_pct']:.0f}% fresh, "
+            f"{out['empty_pct']:.0f}% saldo<${config.EMPTY_WALLET_SOL_USD:.0f}, "
+            f"{out['young_pct']:.0f}% umur<{config.WALLET_YOUNG_AGE_HOURS:.0f}j (top{inspected})"
+        )
+    elif suspicious_pct > config.SUSPICIOUS_TOP20_PCT_THRESHOLD:
         notes.append(f"wallet mencurigakan {suspicious_pct:.0f}% di top20 (>{config.SUSPICIOUS_TOP20_PCT_THRESHOLD:.0f}%)")
     if out["largest_cluster_wallets"] >= 2:
         notes.append(

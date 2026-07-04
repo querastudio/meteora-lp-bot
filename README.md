@@ -23,7 +23,7 @@ Token digugurkan sedini mungkin untuk hemat rate limit API gratis.
 | 1 | Hard filter pool (TVL, base fee, bin step, fee global 20 SOL, quote SOL/USDC) | Meteora | Hard gate |
 | 2 | Hard filter token (mcap, vol24h, **ATH proximity**) | Dexscreener+GeckoTerminal | Hard gate |
 | 3 | **Keamanan kontrak** (no-mint, no-freeze, no-tax) | Helius | Hard gate |
-| 4 | Distribusi holder (top10 <30%; **cluster/bundle terbesar <25%** = gate; fresh/empty wallet = soft) | Helius | Gate + soft |
+| 4 | Distribusi holder (top10 <30%; **cluster/bundle <25%**; **coordinated trading TINGGI** = gate) | Helius | Gate |
 | 5 | Kualitas LP (**fee/TVL harian**, vol/TVL, umur, konsentrasi) | Meteora+Dex | Soft |
 | 6 | Volatilitas "turun-stabil" vs "mati vertikal" | Dexscreener+state | Soft + SKIP |
 | 7 | Narasi: **Viralitas** + **Daya Tahan** (kualitatif+kuantitatif) | Trends/YouTube/Reddit/News | Soft |
@@ -182,6 +182,16 @@ siap-klik** di tiap notifikasi untuk verifikasi manual:
   "bundler boleh ada, asal tak kuasai mayoritas". Untuk verifikasi visual lebih
   dalam (funding chain sungguhan, phishing-tag), link GMGN/Bubblemaps/
   DevsNightmare/Deepnets tetap disediakan di notifikasi.
+- **Coordinated trading / wash trading (top20)** → tanpa panggilan API
+  tambahan, bot hitung persentase top20 holder yang **fresh** (tx sedikit),
+  **saldo rendah** (`< EMPTY_WALLET_SOL_USD`), dan **umur muda**
+  (`< WALLET_YOUNG_AGE_HOURS`, default 24 jam). Kalau rata-rata ketiganya
+  seragam TINGGI (`COORDINATION_HIGH_PCT`, default 70%) → hard gate SKIP
+  (indikasi kuat bundling/wash trading). Ini sample **top20**, bukan top100
+  penuh — cek top100 individual butuh ~5x panggilan Helius lebih banyak per
+  token, berisiko rate-limit & bikin cron 5 menit terlalu lambat; top20 sudah
+  representatif untuk pola paling umum (bundler biasanya pakai wallet baru
+  dalam jumlah besar yang tercermin di top holder mana pun diambil sampelnya).
 - **Data X / Instagram / TikTok / Facebook / pump.fun community** → tak ada API
   gratis stabil (API resmi X kini berbayar) → link cashtag/community/search
   siap-klik untuk cek "vibe" manual. Narasi otomatis diproksikan lewat 4 sumber

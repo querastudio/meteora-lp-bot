@@ -96,6 +96,14 @@ EMPTY_WALLET_SOL_USD = _env_float("EMPTY_WALLET_SOL_USD", 100.0) # saldo SOL < $
 # Proporsi wallet mencurigakan di top20 yang bikin skor turun / SKIP
 SUSPICIOUS_TOP20_PCT_THRESHOLD = _env_float("SUSPICIOUS_TOP20_PCT_THRESHOLD", 30.0)
 
+# Wallet dianggap "muda" bila umurnya (sejak tx pertama terlihat) di bawah ini.
+# Dipakai bareng fresh/empty utk sinyal "coordinated trading" -- lihat holders.py.
+WALLET_YOUNG_AGE_HOURS = _env_float("WALLET_YOUNG_AGE_HOURS", 24.0)
+# Ambang rata-rata (fresh%, empty%, young%) top20 utk label indikasi bundling/
+# wash trading. Makin tinggi & seragam ketiganya -> makin kuat indikasinya.
+COORDINATION_HIGH_PCT = _env_float("COORDINATION_HIGH_PCT", 70.0)
+COORDINATION_MED_PCT = _env_float("COORDINATION_MED_PCT", 40.0)
+
 # --- Deteksi CLUSTER/BUNDLE (ala GMGN/DevsNightmare, versi gratis) ---
 # Proxy: wallet top holder yang "lahir" (tx pertama terlihat) dalam jendela
 # waktu sempit satu sama lain -> kemungkinan 1 entitas pakai banyak wallet
