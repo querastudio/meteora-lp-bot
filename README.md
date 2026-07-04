@@ -21,12 +21,12 @@ Token digugurkan sedini mungkin untuk hemat rate limit API gratis.
 | Stage | Nama | Sumber | Tipe |
 |------|------|--------|------|
 | 1 | Hard filter pool (TVL, base fee, bin step, fee global 20 SOL, quote SOL/USDC) | Meteora | Hard gate |
-| 2 | Hard filter token (mcap, vol24h, **ATH proximity**) | Dexscreener | Hard gate |
+| 2 | Hard filter token (mcap, vol24h, **ATH proximity**) | Dexscreener+GeckoTerminal | Hard gate |
 | 3 | **Keamanan kontrak** (no-mint, no-freeze, no-tax) | Helius | Hard gate |
 | 4 | Distribusi holder (top10 <30% = gate; fresh/empty wallet = soft) | Helius | Gate + soft |
 | 5 | Kualitas LP (**fee/TVL harian**, vol/TVL, umur, konsentrasi) | Meteora+Dex | Soft |
 | 6 | Volatilitas "turun-stabil" vs "mati vertikal" | Dexscreener+state | Soft + SKIP |
-| 7 | Narasi viral (Google Trends, YouTube, News) | pytrends/YT/RSS | Soft |
+| 7 | Narasi: **Viralitas** + **Daya Tahan** (kualitatif+kuantitatif) | Trends/YouTube/Reddit/News | Soft |
 
 **Hard gate gagal → SKIP (dibuang).** Yang lolos semua hard gate diberi **soft score
 0–100** (bobot bisa dituning di `config.py`) → verdict STRONG/WATCH.
@@ -170,9 +170,16 @@ siap-klik** di tiap notifikasi untuk verifikasi manual:
   ⚠️ dan verdict STRONG diturunkan ke WATCH (lihat `DOWNGRADE_ON_WARN`). Cek manual
   via RugCheck/GMGN.
 - **Phishing-tag GMGN & cluster visual Bubblemaps** → link manual disediakan.
-- **Data X / Instagram / TikTok / pump.fun community** → tak ada API gratis stabil →
-  link search siap-klik untuk cek "vibe" manual. Narasi diproksikan lewat Google
-  Trends (sinyal terkuat "tahan lama") + YouTube + Google News.
+- **Data X / Instagram / TikTok / Facebook / pump.fun community** → tak ada API
+  gratis stabil (API resmi X kini berbayar) → link cashtag/community/search
+  siap-klik untuk cek "vibe" manual. Narasi otomatis diproksikan lewat 4 sumber
+  gratis lain: **Google Trends** (daya tahan), **YouTube Data API** (video+view+
+  channel berbeda, butuh key opsional), **Reddit search.json** (post+upvote+
+  subreddit berbeda, no key), **Google News RSS** (artikel+domain berbeda, no key).
+  Skor dipecah 2 sumbu: **Viralitas** (breadth lintas platform + volume mentah +
+  diversitas komunitas) dan **Daya Tahan** (masih hidup setelah beberapa hari vs
+  cuma spike sesaat) — lihat `sources/narrative.py` untuk formulanya, semua
+  threshold/cap bisa dituning di `config.py`.
 - **Bin occupancy & konsentrasi LP granular per-bin** → data per-bin tak tersedia
   gratis-stabil → diestimasi dari rasio vol/TVL dan ditandai `(est)`.
 

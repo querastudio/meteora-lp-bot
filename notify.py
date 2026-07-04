@@ -132,22 +132,52 @@ def format_message(ctx: Dict[str, Any]) -> str:
         lines.append(f"─ Umur pool: {lp['pool_age_hours']:.0f} jam")
     lines.append("")
 
-    # NARASI
-    if nar.get("label") != "OFF":
-        lines.append("📈 <b>NARASI</b>")
+    # NARASI — dipecah 2 sumbu: VIRALITAS (breadth+volume+diversitas komunitas)
+    # vs DAYA TAHAN (masih hidup beberapa hari, bukan cuma spike sesaat).
+    if nar.get("viral_label") != "OFF":
+        lines.append(
+            f"📈 <b>NARASI</b> — Viralitas: {nar.get('viral_label','?')} | "
+            f"Daya Tahan: {nar.get('durability_label','?')}"
+        )
+        lines.append(f"─ Kategori: {nar.get('category','?')}")
+
         t = nar.get("trends", {})
         if t.get("available"):
-            trend_txt = ("📈 naik" if t.get("rising") else "📉 turun")
-            sustain = " (tahan)" if t.get("sustained") else ""
-            lines.append(f"─ Google Trends 7d: {trend_txt}{sustain}")
+            trend_txt = "📈 naik" if t.get("rising") else "📉 turun"
+            sustain = " (blm anjlok)" if t.get("sustained") else " (sudah anjlok)"
+            lines.append(f"─ Google Trends 7d: {trend_txt}{sustain}, avg={t.get('avg',0)}")
         else:
             lines.append("─ Google Trends: n/a")
+
         yt = nar.get("youtube", {})
         if yt.get("available"):
-            lines.append(f"─ YouTube: {yt['video_count']} video / {_h(yt['total_views'])} view (72j)")
+            lines.append(
+                f"─ YouTube: {yt.get('video_count',0)} video / {_h(yt.get('total_views',0))} view "
+                f"/ {yt.get('channel_count',0)} channel berbeda (72j)"
+            )
+        else:
+            lines.append("─ YouTube: n/a (butuh YOUTUBE_API_KEY)")
+
+        rd = nar.get("reddit", {})
+        if rd.get("available"):
+            fresh = "✅ msh ada post baru 24j" if rd.get("posts_last24h", 0) > 0 else "⚠️ tak ada post baru 24j"
+            lines.append(
+                f"─ Reddit: {rd.get('post_count',0)} post / {_h(rd.get('total_score',0))} upvote "
+                f"/ {rd.get('subreddit_count',0)} subreddit berbeda ({fresh})"
+            )
+        else:
+            lines.append("─ Reddit: n/a")
+
         nw = nar.get("news", {})
-        news_txt = f"{nw.get('article_count',0)} artikel" if nw.get("available") else "n/a"
-        lines.append(f"─ News: {news_txt} | Kategori: {nar.get('category','?')} | Narasi: {nar.get('label')}")
+        if nw.get("available"):
+            lines.append(f"─ News: {nw.get('article_count',0)} artikel dari {nw.get('domain_count',0)} domain berbeda")
+        else:
+            lines.append("─ News: n/a")
+
+        # Insight kualitatif otomatis (rule-based dari kombinasi angka di atas).
+        for insight in nar.get("insights", [])[:3]:
+            lines.append(f"  💡 {html.escape(insight)}")
+
         # X (Twitter) tak bisa di-API gratis -> sisipkan link cashtag & community
         # langsung di blok narasi (bukan cuma di baris link bawah) supaya user
         # cek "vibe" manual sebagai bagian dari due diligence narasi, bukan afterthought.

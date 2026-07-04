@@ -119,11 +119,34 @@ VERTICAL_DEATH_DRAWDOWN_PCT = _env_float("VERTICAL_DEATH_DRAWDOWN_PCT", 60.0)
 
 
 # ---------------------------------------------------------------------------
-# STAGE 7 — VALIDASI NARASI VIRAL
+# STAGE 7 — VALIDASI NARASI VIRAL (kualitatif + kuantitatif, lintas platform)
+# Dipecah 2 sumbu: VIRALITAS (breadth+volume+diversitas komunitas) vs DAYA
+# TAHAN (masih hidup beberapa hari, bukan cuma spike sesaat). Lihat
+# sources/narrative.py utk detail formula.
 # ---------------------------------------------------------------------------
 NARRATIVE_ENABLED = _env_bool("NARRATIVE_ENABLED", True)
 YOUTUBE_LOOKBACK_HOURS = _env_int("YOUTUBE_LOOKBACK_HOURS", 72)
 GOOGLE_TRENDS_TIMEFRAME = os.getenv("GOOGLE_TRENDS_TIMEFRAME", "now 7-d")
+
+# Reddit (gratis, no key) -- endpoint publik search.json, TIDAK resmi
+# didokumentasikan utk otomasi berat. Matikan bila mulai kena rate-limit/berubah.
+REDDIT_ENABLED = _env_bool("REDDIT_ENABLED", True)
+
+# Ambang "aktif" per platform utk hitung BREADTH (berapa dari 4 platform hidup).
+NARRATIVE_MIN_YOUTUBE_VIDEOS = _env_int("NARRATIVE_MIN_YOUTUBE_VIDEOS", 5)
+NARRATIVE_MIN_REDDIT_POSTS = _env_int("NARRATIVE_MIN_REDDIT_POSTS", 3)
+NARRATIVE_MIN_NEWS_ARTICLES = _env_int("NARRATIVE_MIN_NEWS_ARTICLES", 2)
+
+# Cap normalisasi VOLUME (angka mentah -> skor 0-1; cap lembut biar 1 metrik
+# whale tak mendominasi skor).
+NARRATIVE_YOUTUBE_VIEWS_CAP = _env_float("NARRATIVE_YOUTUBE_VIEWS_CAP", 1_000_000)
+NARRATIVE_REDDIT_SCORE_CAP = _env_float("NARRATIVE_REDDIT_SCORE_CAP", 5_000)
+NARRATIVE_NEWS_ARTICLES_CAP = _env_float("NARRATIVE_NEWS_ARTICLES_CAP", 20)
+
+# Cap normalisasi DIVERSITAS KOMUNITAS (proxy kualitatif "banyak komunitas").
+NARRATIVE_REDDIT_SUBREDDIT_CAP = _env_float("NARRATIVE_REDDIT_SUBREDDIT_CAP", 10)
+NARRATIVE_YOUTUBE_CHANNEL_CAP = _env_float("NARRATIVE_YOUTUBE_CHANNEL_CAP", 10)
+NARRATIVE_NEWS_DOMAIN_CAP = _env_float("NARRATIVE_NEWS_DOMAIN_CAP", 8)
 
 
 # ---------------------------------------------------------------------------

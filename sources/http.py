@@ -47,6 +47,9 @@ _MIN_INTERVAL = {
     "news.google.com": 0.5,
     # GeckoTerminal free tier: 30 call/menit -> jeda 2.1s aman (1 call/~2s).
     "api.geckoterminal.com": 2.1,
+    # Reddit: tak ada limit resmi dipublikasikan utk endpoint json publik ini;
+    # jeda konservatif spy tak dianggap abuse.
+    "www.reddit.com": 1.0,
 }
 
 

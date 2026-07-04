@@ -1,27 +1,51 @@
 """
-sources/narrative.py — Validasi narasi viral lewat proxy GRATIS lintas platform.
+sources/narrative.py — Validasi narasi viral: KUALITATIF + KUANTITATIF, lintas platform.
 
-Karena X & Instagram tak bisa diakses gratis-stabil, kita pakai proxy yang
-menangkap keviralan lintas platform:
-  - Google Trends (pytrends): lonjakan search 7 hari -> sinyal terkuat & "tahan lama".
-  - YouTube Data API v3 (gratis 10k unit/hari): video + view 72 jam terakhir.
-  - Google News RSS (gratis): ada pemberitaan atau tidak.
+Tujuan (sesuai permintaan user): jangan cuma bilang "narasi kuat/lemah", tapi
+pisahkan dua pertanyaan yang beda:
+  1. VIRALITAS  -> seberapa RAMAI narasi ini sekarang (breadth lintas platform +
+     volume mentah: views, post, artikel) DAN seberapa BERAGAM komunitasnya
+     (proxy kualitatif "banyak komunitas/meme variasi" ala kasus Pepe: dihitung
+     dari jumlah subreddit/channel/domain berita yang BERBEDA, bukan cuma total).
+  2. DAYA TAHAN -> apakah masih hidup setelah beberapa hari (TAHAN LAMA) atau
+     cuma spike sesaat lalu mati (SESAAT, sinyal pump-dump narasi).
 
-Semua dibungkus try/except: sumber unofficial bisa mati kapan saja -> degrade
-gracefully (return skor 0 + tandai tidak tersedia), JANGAN crash run.
+Sumber data (semua GRATIS):
+  - Google Trends (pytrends, no key)  : lonjakan + apakah belum anjlok (7 hari).
+  - YouTube Data API v3 (opsional key): video + view + jumlah CHANNEL berbeda.
+  - Reddit search.json (no key)       : post + upvote + komentar + jumlah
+    SUBREDDIT berbeda + apakah masih ada post baru 24 jam terakhir (durability).
+  - Google News RSS (no key)          : artikel + jumlah domain sumber berbeda.
+
+Keterbatasan yang JUJUR (sesuai batasan awal, TIDAK di-scraping):
+  X/Twitter, Instagram, Facebook, TikTok TIDAK punya API pencarian gratis yang
+  stabil (X API kini berbayar; IG/FB/TikTok tak ada API publik). Untuk itu bot
+  menyediakan LINK siap-klik (lihat notify.py) supaya user cek manual "vibe"-nya,
+  bukan angka otomatis.
+
+Semua panggilan dibungkus try/except: sumber unofficial (pytrends, Reddit json)
+bisa mati/berubah kapan saja -> degrade gracefully (skor 0, tandai tak tersedia),
+JANGAN crash run.
 """
 
 import logging
 import re
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, urlparse
 from xml.etree import ElementTree as ET
 
 import config
 from sources import http
 
 log = logging.getLogger("narrative")
+
+# Reddit mewajibkan User-Agent unik & deskriptif (bukan default requests/browser)
+# supaya tak kena limit lebih ketat -- lihat https://github.com/reddit-archive/reddit/wiki/API
+_REDDIT_HEADERS = {
+    "User-Agent": "meteora-lp-bot/1.0 (github.com/querastudio/meteora-lp-bot; screening bot)"
+}
 
 
 # ---------------------------------------------------------------------------
@@ -47,13 +71,13 @@ def detect_category(name: str, symbol: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Google Trends via pytrends (bobot besar: paling mewakili "tahan lama")
+# Google Trends via pytrends (sinyal daya tahan terkuat: minat msh hidup?)
 # ---------------------------------------------------------------------------
 def google_trends_signal(keyword: str) -> Dict[str, Any]:
     """
-    Return { available, rising: bool, sustained: bool, avg: float }.
+    Return { available, rising, sustained, avg }.
     rising    = tren 7d menaik (perbandingan separuh akhir vs awal).
-    sustained = kurva belum anjlok di titik terakhir (narasi masih hidup).
+    sustained = titik terakhir masih >= 50% puncak (narasi belum anjlok/mati).
     """
     out = {"available": False, "rising": False, "sustained": False, "avg": 0.0}
     if not keyword or len(keyword) < 2:
@@ -79,7 +103,6 @@ def google_trends_signal(keyword: str) -> Dict[str, Any]:
                 "available": True,
                 "avg": round(sum(series) / len(series), 1),
                 "rising": second_avg >= first_avg,
-                # "tahan lama": titik terakhir masih >= 50% puncak (belum anjlok)
                 "sustained": last >= 0.5 * peak,
             }
         )
@@ -93,10 +116,11 @@ def google_trends_signal(keyword: str) -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 def youtube_signal(keyword: str) -> Dict[str, Any]:
     """
-    Return { available, video_count, total_views }.
-    Hitung video baru dalam YOUTUBE_LOOKBACK_HOURS terakhir + total view-nya.
+    Return { available, video_count, total_views, channel_count }.
+    channel_count = jumlah CHANNEL BERBEDA yang membuat video -> proxy
+    "banyak kreator/komunitas ikut membahas" (bukan cuma 1 channel spam).
     """
-    out = {"available": False, "video_count": 0, "total_views": 0}
+    out = {"available": False, "video_count": 0, "total_views": 0, "channel_count": 0}
     if not config.YOUTUBE_API_KEY or not keyword:
         return out
     try:
@@ -106,7 +130,7 @@ def youtube_signal(keyword: str) -> Dict[str, Any]:
         search = http.get_json(
             "https://www.googleapis.com/youtube/v3/search",
             params={
-                "part": "id",
+                "part": "id,snippet",
                 "q": keyword,
                 "type": "video",
                 "order": "date",
@@ -117,12 +141,15 @@ def youtube_signal(keyword: str) -> Dict[str, Any]:
         )
         if not search:
             return out
-        ids = [
-            it["id"]["videoId"]
-            for it in search.get("items", [])
-            if it.get("id", {}).get("videoId")
-        ]
+        items = search.get("items", [])
+        ids = [it["id"]["videoId"] for it in items if it.get("id", {}).get("videoId")]
+        channels = {
+            it["snippet"]["channelId"]
+            for it in items
+            if it.get("snippet", {}).get("channelId")
+        }
         out["video_count"] = len(ids)
+        out["channel_count"] = len(channels)
         out["available"] = True
         if ids:
             stats = http.get_json(
@@ -139,11 +166,89 @@ def youtube_signal(keyword: str) -> Dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# Google News RSS (gratis, no key; bobot kecil)
+# Reddit search.json (gratis, no key) — post/score/comment + diversitas komunitas
+# ---------------------------------------------------------------------------
+def reddit_signal(keyword: str) -> Dict[str, Any]:
+    """
+    Return { available, post_count, total_score, total_comments,
+             subreddit_count, posts_last24h }.
+
+    subreddit_count = jumlah SUBREDDIT BERBEDA yang membahas -> proxy paling
+    langsung utk "banyak komunitas" (persis kasus Pepe: dibahas di r/dogecoin,
+    r/cryptocurrency, r/pepecoin, r/memecoins, dst -- bukan cuma 1 forum).
+
+    posts_last24h > 0 (padahal window pencarian 7 hari) -> narasi masih hidup
+    HARI INI, bukan cuma sisa spike beberapa hari lalu -> sinyal daya tahan.
+
+    Endpoint publik Reddit ini TIDAK RESMI didokumentasikan untuk otomasi berat
+    -- bisa di-rate-limit/berubah kapan saja. Degrade gracefully bila gagal.
+    """
+    out = {
+        "available": False,
+        "post_count": 0,
+        "total_score": 0,
+        "total_comments": 0,
+        "subreddit_count": 0,
+        "posts_last24h": 0,
+    }
+    if not config.REDDIT_ENABLED or not keyword:
+        return out
+    try:
+        data = http.get_json(
+            "https://www.reddit.com/search.json",
+            params={
+                "q": keyword,
+                "sort": "new",
+                "limit": 100,
+                "t": "week",
+                "restrict_sr": "false",
+            },
+            headers=_REDDIT_HEADERS,
+        )
+        if not data:
+            return out
+        children = (data.get("data") or {}).get("children") or []
+        if not children:
+            out["available"] = True  # call sukses, memang tak ada post
+            return out
+
+        now = datetime.now(timezone.utc).timestamp()
+        subreddits: Counter = Counter()
+        total_score = 0
+        total_comments = 0
+        posts_24h = 0
+        for c in children:
+            d = c.get("data") or {}
+            sub = d.get("subreddit")
+            if sub:
+                subreddits[sub] += 1
+            total_score += int(d.get("score", 0) or 0)
+            total_comments += int(d.get("num_comments", 0) or 0)
+            created = d.get("created_utc")
+            if created and (now - float(created)) <= 86400:
+                posts_24h += 1
+
+        out.update(
+            {
+                "available": True,
+                "post_count": len(children),
+                "total_score": total_score,
+                "total_comments": total_comments,
+                "subreddit_count": len(subreddits),
+                "posts_last24h": posts_24h,
+            }
+        )
+    except Exception as e:  # noqa: BLE001
+        log.info("Reddit gagal utk '%s': %s (degrade)", keyword, e)
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Google News RSS (gratis, no key) — artikel + diversitas domain sumber
 # ---------------------------------------------------------------------------
 def google_news_signal(keyword: str) -> Dict[str, Any]:
-    """Return { available, article_count }."""
-    out = {"available": False, "article_count": 0}
+    """Return { available, article_count, domain_count }."""
+    out = {"available": False, "article_count": 0, "domain_count": 0}
     if not keyword:
         return out
     try:
@@ -153,63 +258,166 @@ def google_news_signal(keyword: str) -> Dict[str, Any]:
             return out
         root = ET.fromstring(resp.content)
         items = root.findall(".//item")
-        out.update({"available": True, "article_count": len(items)})
+        domains = set()
+        for it in items:
+            src = it.find("source")
+            if src is not None and src.get("url"):
+                try:
+                    domains.add(urlparse(src.get("url")).netloc)
+                except ValueError:
+                    pass
+        out.update(
+            {"available": True, "article_count": len(items), "domain_count": len(domains)}
+        )
     except Exception as e:  # noqa: BLE001
         log.info("Google News gagal utk '%s': %s (degrade)", keyword, e)
     return out
 
 
 # ---------------------------------------------------------------------------
-# Agregasi narasi -> label KUAT/SEDANG/LEMAH
+# Agregasi: pisahkan VIRALITAS (breadth+volume+diversitas) vs DAYA TAHAN
 # ---------------------------------------------------------------------------
+def _norm(value: float, cap: float) -> float:
+    """Normalisasi 0-1 dengan cap lembut (hindari 1 metrik whale mendominasi)."""
+    if cap <= 0:
+        return 0.0
+    return max(0.0, min(value / cap, 1.0))
+
+
 def evaluate_narrative(name: str, symbol: str) -> Dict[str, Any]:
     """
-    Gabungkan semua sinyal narasi. Return dict siap dipakai scoring & notif:
-      { category, label, sustained, trends, youtube, news, keyword }
-    Skor 0-1 (dipakai scoring.py utk dikali bobot).
-    """
-    if not config.NARRATIVE_ENABLED:
-        return {"category": "n/a", "label": "OFF", "score": 0.0, "sustained": False,
-                "trends": {}, "youtube": {}, "news": {}, "keyword": symbol}
+    Gabungkan semua sinyal jadi dua sumbu terpisah + rincian kuantitatif mentah
+    (dipakai notify.py utk tampilkan angka asli, bukan cuma label).
 
-    # Keyword: pakai simbol bila cukup unik, else nama.
+    Return:
+      {
+        category, keyword, score (0-1, dipakai scoring.py),
+        viral_label ("SANGAT VIRAL"/"VIRAL"/"SEDANG"/"LEMAH"),
+        durability_label ("TAHAN LAMA"/"SEDANG"/"SESAAT"),
+        breadth_score, volume_score, diversity_score, durability_score (0-1),
+        insights: [str, ...]  -- kalimat kualitatif otomatis (rule-based),
+        trends, youtube, reddit, news  -- data mentah per sumber,
+      }
+    """
+    empty = {
+        "category": "n/a", "keyword": symbol, "score": 0.0,
+        "viral_label": "OFF", "durability_label": "OFF",
+        "breadth_score": 0.0, "volume_score": 0.0, "diversity_score": 0.0,
+        "durability_score": 0.0, "insights": [],
+        "trends": {}, "youtube": {}, "reddit": {}, "news": {},
+    }
+    if not config.NARRATIVE_ENABLED:
+        return empty
+
     keyword = symbol if symbol and len(symbol) >= 3 and symbol != "?" else name
     category = detect_category(name, symbol)
 
     trends = google_trends_signal(keyword)
     youtube = youtube_signal(keyword)
+    reddit = reddit_signal(keyword)
     news = google_news_signal(keyword)
 
-    # Skoring proxy (bobot: trends 0.6, youtube 0.3, news 0.1)
-    score = 0.0
-    if trends.get("available"):
-        if trends.get("rising"):
-            score += 0.4
-        if trends.get("sustained"):
-            score += 0.2
-    if youtube.get("available"):
-        vc = youtube.get("video_count", 0)
-        if vc >= 15:
-            score += 0.3
-        elif vc >= 5:
-            score += 0.15
-    if news.get("available") and news.get("article_count", 0) >= 3:
-        score += 0.1
+    # --- BREADTH: berapa dari 4 platform yang menunjukkan aktivitas nyata ---
+    active_flags = [
+        trends.get("available") and trends.get("rising"),
+        youtube.get("available") and youtube.get("video_count", 0) >= config.NARRATIVE_MIN_YOUTUBE_VIDEOS,
+        reddit.get("available") and reddit.get("post_count", 0) >= config.NARRATIVE_MIN_REDDIT_POSTS,
+        news.get("available") and news.get("article_count", 0) >= config.NARRATIVE_MIN_NEWS_ARTICLES,
+    ]
+    breadth_score = sum(1 for f in active_flags if f) / 4.0
 
-    if score >= 0.6:
-        label = "KUAT"
-    elif score >= 0.3:
-        label = "SEDANG"
+    # --- VOLUME: angka mentah dinormalisasi (kuantitatif) ---
+    vol_parts: List[float] = []
+    if trends.get("available"):
+        vol_parts.append(_norm(trends.get("avg", 0.0), 100.0))
+    if youtube.get("available"):
+        vol_parts.append(_norm(youtube.get("total_views", 0), config.NARRATIVE_YOUTUBE_VIEWS_CAP))
+    if reddit.get("available") and reddit.get("post_count", 0) > 0:
+        vol_parts.append(_norm(reddit.get("total_score", 0), config.NARRATIVE_REDDIT_SCORE_CAP))
+    if news.get("available"):
+        vol_parts.append(_norm(news.get("article_count", 0), config.NARRATIVE_NEWS_ARTICLES_CAP))
+    volume_score = sum(vol_parts) / len(vol_parts) if vol_parts else 0.0
+
+    # --- DIVERSITAS KOMUNITAS: proxy kualitatif "banyak komunitas/variasi" ---
+    div_parts: List[float] = []
+    if reddit.get("available") and reddit.get("post_count", 0) > 0:
+        div_parts.append(_norm(reddit.get("subreddit_count", 0), config.NARRATIVE_REDDIT_SUBREDDIT_CAP))
+    if youtube.get("available") and youtube.get("video_count", 0) > 0:
+        div_parts.append(_norm(youtube.get("channel_count", 0), config.NARRATIVE_YOUTUBE_CHANNEL_CAP))
+    if news.get("available") and news.get("article_count", 0) > 0:
+        div_parts.append(_norm(news.get("domain_count", 0), config.NARRATIVE_NEWS_DOMAIN_CAP))
+    diversity_score = sum(div_parts) / len(div_parts) if div_parts else 0.0
+
+    # --- DAYA TAHAN: masih hidup setelah beberapa hari, bukan cuma spike ---
+    dur_parts: List[float] = []
+    if trends.get("available"):
+        dur_parts.append(1.0 if trends.get("sustained") else 0.2)
+    if reddit.get("available") and reddit.get("post_count", 0) > 0:
+        # masih ada post BARU 24 jam terakhir dalam window 7 hari -> msh hidup.
+        dur_parts.append(1.0 if reddit.get("posts_last24h", 0) > 0 else 0.3)
+    durability_score = sum(dur_parts) / len(dur_parts) if dur_parts else 0.0
+
+    # --- Skor komposit (dipakai scoring.py, bobot "narrative") ---
+    score = (
+        0.30 * breadth_score
+        + 0.30 * volume_score
+        + 0.15 * diversity_score
+        + 0.25 * durability_score
+    )
+
+    # --- Label ---
+    if breadth_score >= 0.75 and volume_score >= 0.6:
+        viral_label = "🔥 SANGAT VIRAL"
+    elif breadth_score >= 0.5:
+        viral_label = "VIRAL"
+    elif breadth_score >= 0.25:
+        viral_label = "SEDANG"
     else:
-        label = "LEMAH"
+        viral_label = "LEMAH"
+
+    if durability_score >= 0.7:
+        durability_label = "TAHAN LAMA"
+    elif durability_score >= 0.4:
+        durability_label = "SEDANG"
+    else:
+        durability_label = "SESAAT (waspada pump lalu mati)"
+
+    # --- Insight kualitatif otomatis (rule-based, bukan LLM -> deterministik) ---
+    insights: List[str] = []
+    n_active = sum(1 for f in active_flags if f)
+    if n_active >= 3:
+        insights.append(f"aktif di {n_active}/4 platform (bukan 1 sumber saja)")
+    elif n_active <= 1:
+        insights.append("cuma aktif di 1 platform atau kurang -- narasi sempit")
+
+    total_communities = reddit.get("subreddit_count", 0) + youtube.get("channel_count", 0)
+    if total_communities >= 8:
+        insights.append(
+            f"{reddit.get('subreddit_count',0)} subreddit & {youtube.get('channel_count',0)} channel "
+            f"berbeda ikut bahas -- indikasi organik lintas komunitas"
+        )
+    elif total_communities <= 2 and (reddit.get("available") or youtube.get("available")):
+        insights.append("sumber pembahasan masih sempit (sedikit komunitas/kreator berbeda)")
+
+    if reddit.get("available") and reddit.get("post_count", 0) > 0 and reddit.get("posts_last24h", 0) == 0:
+        insights.append("Reddit: tak ada post baru 24 jam terakhir -- momentum mereda")
+
+    if trends.get("available") and not trends.get("sustained"):
+        insights.append("Google Trends sudah turun jauh dari puncak -- minat mereda")
 
     return {
         "category": category,
-        "label": label,
-        "score": round(min(score, 1.0), 2),
-        "sustained": bool(trends.get("sustained")),
+        "keyword": keyword,
+        "score": round(min(max(score, 0.0), 1.0), 2),
+        "viral_label": viral_label,
+        "durability_label": durability_label,
+        "breadth_score": round(breadth_score, 2),
+        "volume_score": round(volume_score, 2),
+        "diversity_score": round(diversity_score, 2),
+        "durability_score": round(durability_score, 2),
+        "insights": insights,
         "trends": trends,
         "youtube": youtube,
+        "reddit": reddit,
         "news": news,
-        "keyword": keyword,
     }
