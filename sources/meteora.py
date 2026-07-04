@@ -1,119 +1,32 @@
 """
 sources/meteora.py — Ambil daftar pool DLMM Meteora + normalisasi field.
 
-Endpoint gratis (no key):
-  https://dlmm-api.meteora.ag/pair/all_with_pagination
+Endpoint gratis (no key), API baru per OpenAPI spec resmi Meteora:
+  https://dlmm.datapi.meteora.ag/pools
+  (endpoint lama dlmm-api.meteora.ag/pair/all_with_pagination sudah pensiun -> 404)
 
-Field yang kita pakai (nama bisa berbeda antar versi API -> kita normalisasi):
-  - address        : alamat pool (untuk link Meteora & dedup)
-  - name           : "TOKEN-SOL" dsb
-  - mint_x / mint_y: dua sisi pasangan
-  - liquidity      : TVL (USD, string)
-  - bin_step
-  - base_fee_percentage
-  - cumulative_fee_volume / fees   : total fee global (USD)
-  - trade_volume_24h / volume      : volume 24h (USD)
-  - fees_24h                       : fee 24h (USD) untuk fee/TVL Stage 5
+Catatan penting spesifikasi:
+  - `page` 1-based (bukan 0-based)
+  - `page_size` maksimal 1000 -> bisa ambil banyak pool dalam 1 call
+  - `filter_by=is_blacklisted=false` : Meteora sendiri menandai pool blacklist,
+    kita pakai ini sebagai lapisan keamanan gratis tambahan (di luar Stage 3).
+  - `sort_by=volume_24h:desc` : kandidat fee bagus lebih dulu diproses.
 
-Kita ambil pool terurut dari yang aktivitasnya tinggi, lalu screening di pipeline.
+Field respons (`data[]`) yang kita pakai (lihat _normalize):
+  address, name, token_x.address, token_y.address, tvl,
+  pool_config.bin_step, pool_config.base_fee_pct,
+  cumulative_metrics.fees, volume.24h, fees.24h, is_blacklisted
 """
 
 import logging
-import os
-from typing import Any, Dict, List, Optional
-from urllib.parse import quote, urlencode
+from typing import Any, Dict, List
 
 from sources import http
 
 log = logging.getLogger("meteora")
 
-# curl_cffi meniru sidik jari TLS Chrome -> menembus deteksi bot Cloudflare
-# (yang balas 404 ke klien "polos" seperti requests/urllib dari IP data-center).
-# Ini cara paling ampuh & ringan untuk mengambil data Meteora dari GitHub Actions.
-try:
-    from curl_cffi import requests as _cffi  # type: ignore
-
-    _HAS_CFFI = True
-except Exception:  # noqa: BLE001 — opsional; fallback ke requests biasa + relay
-    _HAS_CFFI = False
-
-BASE = "https://dlmm-api.meteora.ag"
-PAIR_PAGINATED = f"{BASE}/pair/all_with_pagination"
-PAIR_ALL = f"{BASE}/pair/all"
-
-# Beberapa API front-end memvalidasi Referer/Origin (menolak request "polos").
-# Kirim seolah datang dari app resmi Meteora.
-_MET_HEADERS = {
-    "Referer": "https://app.meteora.ag/",
-    "Origin": "https://app.meteora.ag",
-}
-
-# Cloudflare Meteora memblokir IP data-center (mis. runner GitHub Actions -> 404).
-# Relay publik mengambil data dari IP-nya sendiri (tak diblokir) lalu meneruskan.
-# Kita coba beberapa relay berantai karena relay gratis sering flaky/timeout.
-# Override daftar via env METEORA_PROXY (pisah koma). Set METEORA_PROXY=off utk mematikan.
-# {url} diganti URL Meteora lengkap yang sudah di-URL-encode.
-_DEFAULT_PROXIES = [
-    "https://api.codetabs.com/v1/proxy/?quest={url}",
-    "https://corsproxy.io/?url={url}",
-    "https://api.allorigins.win/raw?url={url}",
-]
-
-
-def _proxy_list() -> List[str]:
-    env = os.getenv("METEORA_PROXY", "").strip()
-    if env.lower() == "off":
-        return []
-    if env:
-        return [p.strip() for p in env.split(",") if p.strip()]
-    return _DEFAULT_PROXIES
-
-
-def _browser_get(url: str, params: Optional[Dict[str, Any]] = None) -> Optional[Any]:
-    """Ambil JSON via curl_cffi dengan sidik jari TLS Chrome (menembus bot-detection)."""
-    if not _HAS_CFFI:
-        return None
-    try:
-        r = _cffi.get(
-            url, params=params, headers=_MET_HEADERS, impersonate="chrome", timeout=25
-        )
-        if r.status_code == 200:
-            return r.json()
-        log.info("Meteora cffi %s -> %d", url.split("/")[2], r.status_code)
-    except Exception as e:  # noqa: BLE001
-        log.info("Meteora cffi gagal: %s", e)
-    return None
-
-
-def _get_meteora(base_url: str, params: Optional[Dict[str, Any]] = None) -> Optional[Any]:
-    """
-    Ambil JSON dari Meteora dengan strategi berlapis:
-      1. curl_cffi (TLS Chrome) — paling ampuh menembus Cloudflare bot-detection.
-      2. requests biasa langsung — kalau kebetulan IP/jaringan tak diblokir.
-      3. relay publik (METEORA_PROXY / default) — cadangan terakhir.
-    """
-    # 1. curl_cffi langsung (biasanya sudah cukup dari GitHub Actions).
-    data = _browser_get(base_url, params)
-    if data is not None:
-        return data
-
-    # 2. requests biasa (jaga-jaga bila curl_cffi tak terpasang).
-    data = http.get_json(base_url, params=params, headers=_MET_HEADERS)
-    if data:
-        return data
-
-    # 3. relay publik / Worker sendiri.
-    full = base_url + ("?" + urlencode(params) if params else "")
-    encoded = quote(full, safe="")
-    for tmpl in _proxy_list():
-        proxied = tmpl.format(url=encoded)
-        host = tmpl.split("/")[2] if "//" in tmpl else tmpl
-        log.info("Meteora: langsung gagal -> coba relay %s", host)
-        data = http.get_json(proxied, timeout=25, max_retries=1)
-        if data and _rows_from(data):
-            log.info("Meteora: relay %s berhasil", host)
-            return data
-    return None
+BASE = "https://dlmm.datapi.meteora.ag"
+POOLS_URL = f"{BASE}/pools"
 
 
 def _to_float(v: Any, default: float = 0.0) -> float:
@@ -127,52 +40,62 @@ def _to_float(v: Any, default: float = 0.0) -> float:
 
 def _normalize(pair: Dict[str, Any]) -> Dict[str, Any]:
     """Seragamkan field pool ke bentuk internal yang stabil dipakai pipeline."""
+    token_x = pair.get("token_x") or {}
+    token_y = pair.get("token_y") or {}
+    pool_cfg = pair.get("pool_config") or {}
+    volume = pair.get("volume") or {}
+    fees = pair.get("fees") or {}
+    cumulative = pair.get("cumulative_metrics") or {}
+
     return {
-        "address": pair.get("address") or pair.get("pool_address") or "",
+        "address": pair.get("address") or "",
         "name": pair.get("name") or "",
-        "mint_x": pair.get("mint_x") or "",
-        "mint_y": pair.get("mint_y") or "",
-        "tvl_usd": _to_float(pair.get("liquidity")),
-        "bin_step": int(_to_float(pair.get("bin_step"))),
-        "base_fee_pct": _to_float(pair.get("base_fee_percentage")),
+        "mint_x": token_x.get("address") or "",
+        "mint_y": token_y.get("address") or "",
+        "tvl_usd": _to_float(pair.get("tvl")),
+        "bin_step": int(_to_float(pool_cfg.get("bin_step"))),
+        "base_fee_pct": _to_float(pool_cfg.get("base_fee_pct")),
         # total fee global sepanjang umur pool (dipakai gate 20 SOL)
-        "cumulative_fee_usd": _to_float(
-            pair.get("cumulative_fee_volume") or pair.get("fees")
-        ),
-        "volume_24h_usd": _to_float(
-            (pair.get("trade_volume_24h"))
-            or (isinstance(pair.get("volume"), dict) and pair["volume"].get("h24"))
-            or 0.0
-        ),
-        "fees_24h_usd": _to_float(
-            (pair.get("fees_24h"))
-            or (isinstance(pair.get("fees"), dict) and pair["fees"].get("h24"))
-            or 0.0
-        ),
-        # simpan mentah untuk keperluan lanjutan (mis. reserve, umur)
+        "cumulative_fee_usd": _to_float(cumulative.get("fees")),
+        "volume_24h_usd": _to_float(volume.get("24h")),
+        "fees_24h_usd": _to_float(fees.get("24h")),
+        "is_blacklisted": bool(pair.get("is_blacklisted")),
+        # simpan mentah untuk keperluan lanjutan (mis. token_x/y price, apr, tags)
         "_raw": pair,
     }
 
 
 def _rows_from(data: Any) -> List[Dict[str, Any]]:
-    """Ekstrak list pair dari berbagai bentuk respon (list langsung / {pairs|data:[...]})."""
+    """Ekstrak list pool dari respons `/pools` (key "data")."""
+    if isinstance(data, dict):
+        return data.get("data") or []
     if isinstance(data, list):
         return data
-    if isinstance(data, dict):
-        return data.get("pairs") or data.get("data") or data.get("groups") or []
     return []
 
 
-def _fetch_paginated(max_pools: int, page_size: int) -> List[Dict[str, Any]]:
+def fetch_pools(max_pools: int, page_size: int = 200) -> List[Dict[str, Any]]:
     """
-    Endpoint utama: /pair/all_with_pagination.
-    Param di-minimal-kan (hanya page & limit) karena kombinasi sort_key/order_by
-    tertentu bisa memicu 404 di sisi Meteora. Sudah terurut aktivitas dari server.
+    Ambil pool DLMM Meteora ter-normalisasi (maks `max_pools`), terurut volume 24h.
+
+    `page` di API ini 1-based. `page_size` di-cap 1000 oleh server.
+    filter_by=is_blacklisted=false membuang pool yang sudah ditandai Meteora
+    sebagai bermasalah -- lapisan keamanan gratis tambahan di luar Stage 3.
     """
     pools: List[Dict[str, Any]] = []
-    page = 0
+    page = 1
+    page_size = min(page_size, 1000)
+
     while len(pools) < max_pools:
-        data = _get_meteora(PAIR_PAGINATED, params={"page": page, "limit": page_size})
+        data = http.get_json(
+            POOLS_URL,
+            params={
+                "page": page,
+                "page_size": page_size,
+                "sort_by": "volume_24h:desc",
+                "filter_by": "is_blacklisted=false",
+            },
+        )
         if not data:
             break
         rows = _rows_from(data)
@@ -181,46 +104,13 @@ def _fetch_paginated(max_pools: int, page_size: int) -> List[Dict[str, Any]]:
         for pair in rows:
             try:
                 pools.append(_normalize(pair))
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:  # noqa: BLE001 — 1 pool rusak tak boleh crash run
                 log.debug("skip pool malformed: %s", e)
             if len(pools) >= max_pools:
                 break
         if len(rows) < page_size:
             break
         page += 1
-    return pools
-
-
-def _fetch_all_fallback(max_pools: int) -> List[Dict[str, Any]]:
-    """
-    Fallback: /pair/all (tanpa paginasi, kembalikan semua). Bisa besar, jadi kita
-    urutkan client-side by volume 24h desc lalu ambil top `max_pools`.
-    """
-    data = _get_meteora(PAIR_ALL)
-    rows = _rows_from(data)
-    if not rows:
-        return []
-    pools = []
-    for pair in rows:
-        try:
-            pools.append(_normalize(pair))
-        except Exception as e:  # noqa: BLE001
-            log.debug("skip pool malformed: %s", e)
-    pools.sort(key=lambda p: p.get("volume_24h_usd", 0.0), reverse=True)
-    return pools[:max_pools]
-
-
-def fetch_pools(max_pools: int, page_size: int = 100) -> List[Dict[str, Any]]:
-    """
-    Ambil pool DLMM Meteora ter-normalisasi (maks `max_pools`).
-
-    Strategi tahan-banting: coba endpoint paginasi dulu; kalau gagal/kosong
-    (mis. 404), jatuh ke /pair/all lalu urut client-side. Return list dict.
-    """
-    pools = _fetch_paginated(max_pools, page_size)
-    if not pools:
-        log.info("Meteora: paginasi kosong/gagal -> coba fallback /pair/all")
-        pools = _fetch_all_fallback(max_pools)
 
     log.info("Meteora: %d pool diambil", len(pools))
     return pools

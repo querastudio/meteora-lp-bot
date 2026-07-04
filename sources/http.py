@@ -40,7 +40,7 @@ _last_call: Dict[str, float] = {}
 # Jeda minimal antar-call per host (detik). Dexscreener ~300/min => ~0.2s aman.
 _MIN_INTERVAL = {
     "api.dexscreener.com": 0.25,
-    "dlmm-api.meteora.ag": 0.2,
+    "dlmm.datapi.meteora.ag": 0.2,
     "mainnet.helius-rpc.com": 0.15,
     "trends.google.com": 1.0,
     "www.googleapis.com": 0.2,
