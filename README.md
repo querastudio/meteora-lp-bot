@@ -134,6 +134,43 @@ Keamanan kontrak **tidak** diberi bobot soft — ia **hard gate biner** (satu ga
 
 ---
 
+## 🛡️ Cloudflare Worker relay (WAJIB untuk GitHub Actions)
+
+**Masalah:** API Meteora (`dlmm-api.meteora.ag`) berada di belakang Cloudflare yang
+**memblokir IP data-center** — termasuk runner GitHub Actions. Akibatnya request
+langsung dari CI dapat **404** (padahal dari browser/HP normal jalan). Relay publik
+gratis (allorigins, codetabs, corsproxy) tidak reliable (ikut diblokir / timeout /
+kini berbayar).
+
+**Solusi gratis & andal:** relay milik sendiri di **Cloudflare Workers** (100k
+request/hari gratis). Worker jalan di jaringan Cloudflare sehingga request ke
+Meteora tidak kena blokir IP.
+
+### Langkah deploy (dashboard, tanpa CLI)
+1. Daftar/login **[dash.cloudflare.com](https://dash.cloudflare.com)** (gratis).
+2. **Workers & Pages → Create → Workers → Create Worker**. Beri nama, mis.
+   `meteora-relay`. Klik **Deploy** (ini membuat worker "hello world").
+3. Klik **Edit code**, hapus isinya, **paste seluruh isi** file
+   [`docs/cloudflare-worker.js`](docs/cloudflare-worker.js), lalu **Deploy**.
+4. Salin URL Worker-nya, bentuknya:
+   `https://meteora-relay.<subdomain-kamu>.workers.dev`
+5. Di GitHub: **Settings → Secrets and variables → Actions → tab _Variables_ →
+   New repository variable**:
+   - **Name:** `METEORA_PROXY`
+   - **Value:** `https://meteora-relay.<subdomain-kamu>.workers.dev/?url={url}`
+     ⚠️ Biarkan teks `{url}` apa adanya — bot yang mengisinya otomatis.
+6. Jalankan ulang workflow. Bot akan coba Meteora langsung dulu, gagal, lalu lewat
+   Worker-mu (andal).
+
+> Uji cepat Worker: buka di browser
+> `https://meteora-relay.<subdomain>.workers.dev/?url=https%3A%2F%2Fdlmm-api.meteora.ag%2Fpair%2Fall_with_pagination%3Fpage%3D0%26limit%3D2`
+> — harus muncul JSON pool.
+
+Kalau kamu menjalankan bot dari IP residential (mis. PC sendiri), relay tak perlu:
+set `METEORA_PROXY=off`.
+
+---
+
 ## 💾 State antar-run: kenapa commit-back?
 
 Bot butuh mengingat **riwayat harga/ATH** (untuk gate ATH Stage 2) dan **pool yang
