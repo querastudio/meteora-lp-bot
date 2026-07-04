@@ -106,8 +106,24 @@ def _process_candidate(pool: Dict[str, Any], st: Dict[str, Any], sol_price: floa
     symbol = metrics["symbol"]
     # ATH sungguhan (candle OHLCV GeckoTerminal, ~6 bulan riwayat) -- degrade
     # gracefully ke None kalau pool belum terindeks / API gagal.
-    gt_ath_raw = geckoterminal.get_pool_ath(pool["address"])
+    #
+    # PENTING: pakai pool address yg SAMA dgn sumber harga "sekarang" (best pair
+    # Dexscreener), BUKAN selalu pool Meteora kita -- token bisa trading di
+    # beberapa DEX (mis. Meteora + Raydium) dgn riwayat harga yg beda. Kalau
+    # dicampur (ATH dari pool A, harga sekarang dari pool B), perbandingan jadi
+    # tak konsisten/salah -- ini kemungkinan akar masalah kasus $manlet.
+    ath_pool_address = metrics.get("pair_address") or pool["address"]
+    gt_ath_raw = geckoterminal.get_pool_ath(ath_pool_address)
     gt_ath = _sanity_check_ath(gt_ath_raw, metrics["price_usd"], symbol)
+
+    state_ath_before = state_mod.get_token(st, mint).get("ath", 0.0)
+    log.info(
+        "ATH-debug $%s: harga_now=%.10g gt_ath_raw=%s gt_ath_terpakai=%s state_ath_lama=%.10g "
+        "(pool_ath_lookup=%s vs pool_meteora=%s)",
+        symbol, metrics["price_usd"], gt_ath_raw, gt_ath, state_ath_before,
+        ath_pool_address, pool["address"],
+    )
+
     # Catat harga & ambil ATH-baseline SEBELUM update. GeckoTerminal (kalau valid)
     # DIPERCAYA sbg sumber otoritatif -- lihat state.record_price kenapa ini
     # penting (state sendiri bisa "keracunan" bacaan harga keliru di masa lalu).

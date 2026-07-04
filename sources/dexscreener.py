@@ -87,6 +87,11 @@ def get_token_metrics(mint: str) -> Optional[Dict[str, Any]]:
         "liquidity_usd": _to_float(liq.get("usd")),
         "pair_created_at": best.get("pairCreatedAt"),  # ms epoch atau None
         "url": best.get("url") or "",
+        # Alamat pair yg harganya kita pakai (bisa BEDA dari pool Meteora kita,
+        # mis. token juga trading di Raydium dgn likuiditas lebih besar). Dipakai
+        # utk pastikan lookup ATH GeckoTerminal konsisten dgn sumber harga ini.
+        "pair_address": best.get("pairAddress") or "",
+        "dex_id": best.get("dexId") or "",
         "_raw": best,
     }
     _CACHE[mint] = (time.time(), metrics)
