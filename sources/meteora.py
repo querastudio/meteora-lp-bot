@@ -27,6 +27,16 @@ from sources import http
 
 log = logging.getLogger("meteora")
 
+# curl_cffi meniru sidik jari TLS Chrome -> menembus deteksi bot Cloudflare
+# (yang balas 404 ke klien "polos" seperti requests/urllib dari IP data-center).
+# Ini cara paling ampuh & ringan untuk mengambil data Meteora dari GitHub Actions.
+try:
+    from curl_cffi import requests as _cffi  # type: ignore
+
+    _HAS_CFFI = True
+except Exception:  # noqa: BLE001 — opsional; fallback ke requests biasa + relay
+    _HAS_CFFI = False
+
 BASE = "https://dlmm-api.meteora.ag"
 PAIR_PAGINATED = f"{BASE}/pair/all_with_pagination"
 PAIR_ALL = f"{BASE}/pair/all"
@@ -59,22 +69,46 @@ def _proxy_list() -> List[str]:
     return _DEFAULT_PROXIES
 
 
+def _browser_get(url: str, params: Optional[Dict[str, Any]] = None) -> Optional[Any]:
+    """Ambil JSON via curl_cffi dengan sidik jari TLS Chrome (menembus bot-detection)."""
+    if not _HAS_CFFI:
+        return None
+    try:
+        r = _cffi.get(
+            url, params=params, headers=_MET_HEADERS, impersonate="chrome", timeout=25
+        )
+        if r.status_code == 200:
+            return r.json()
+        log.info("Meteora cffi %s -> %d", url.split("/")[2], r.status_code)
+    except Exception as e:  # noqa: BLE001
+        log.info("Meteora cffi gagal: %s", e)
+    return None
+
+
 def _get_meteora(base_url: str, params: Optional[Dict[str, Any]] = None) -> Optional[Any]:
     """
-    Ambil JSON dari Meteora. Coba langsung dulu; kalau gagal (mis. Cloudflare 404
-    karena IP CI diblokir), coba tiap relay berurutan sampai ada yang berhasil.
+    Ambil JSON dari Meteora dengan strategi berlapis:
+      1. curl_cffi (TLS Chrome) — paling ampuh menembus Cloudflare bot-detection.
+      2. requests biasa langsung — kalau kebetulan IP/jaringan tak diblokir.
+      3. relay publik (METEORA_PROXY / default) — cadangan terakhir.
     """
+    # 1. curl_cffi langsung (biasanya sudah cukup dari GitHub Actions).
+    data = _browser_get(base_url, params)
+    if data is not None:
+        return data
+
+    # 2. requests biasa (jaga-jaga bila curl_cffi tak terpasang).
     data = http.get_json(base_url, params=params, headers=_MET_HEADERS)
     if data:
         return data
 
+    # 3. relay publik / Worker sendiri.
     full = base_url + ("?" + urlencode(params) if params else "")
     encoded = quote(full, safe="")
     for tmpl in _proxy_list():
         proxied = tmpl.format(url=encoded)
         host = tmpl.split("/")[2] if "//" in tmpl else tmpl
-        log.info("Meteora: request langsung gagal -> coba relay %s", host)
-        # relay bisa lambat -> beri timeout lebih longgar, tanpa retry berlebihan
+        log.info("Meteora: langsung gagal -> coba relay %s", host)
         data = http.get_json(proxied, timeout=25, max_retries=1)
         if data and _rows_from(data):
             log.info("Meteora: relay %s berhasil", host)
