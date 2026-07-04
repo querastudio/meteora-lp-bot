@@ -38,7 +38,8 @@
 0.3175,
 0.3237,
 0.3435,
-0.3526
+0.3526,
+0.3317
 ],
 "symbol": "ANSEM"
 },
@@ -60,9 +61,17 @@
 0.003234,
 0.002896,
 0.003582,
-0.002956
+0.002956,
+0.002537
 ],
 "symbol": "MENSA"
+},
+"DLvuaz18bKnh1hEaCZsZ5NgJi7wYFm5RvgZVA2M5pump": {
+"ath": 0.0037165838084817645,
+"price_history": [
+0.001454
+],
+"symbol": "BABYANSEM"
 },
 "DdPrHYqM8Ueovnk9kAnAgoGhswkuaTqmxcoZzU3Zpump": {
 "ath": 0.0238846178426213,
@@ -82,7 +91,8 @@
 0.0181,
 0.01924,
 0.01442,
-0.01261
+0.01261,
+0.01748
 ],
 "symbol": "manlet"
 },
@@ -106,5 +116,5 @@
 "symbol": "FABLE"
 }
 },
-"updated_at": 1783197217.5982535
+"updated_at": 1783200728.7276826
 }
