@@ -27,6 +27,7 @@ log = logging.getLogger("meteora")
 
 BASE = "https://dlmm-api.meteora.ag"
 PAIR_PAGINATED = f"{BASE}/pair/all_with_pagination"
+PAIR_ALL = f"{BASE}/pair/all"
 
 
 def _to_float(v: Any, default: float = 0.0) -> float:
@@ -67,46 +68,73 @@ def _normalize(pair: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def fetch_pools(max_pools: int, page_size: int = 100) -> List[Dict[str, Any]]:
-    """
-    Ambil pool DLMM (paginasi) sampai terkumpul `max_pools` pool ter-normalisasi.
+def _rows_from(data: Any) -> List[Dict[str, Any]]:
+    """Ekstrak list pair dari berbagai bentuk respon (list langsung / {pairs|data:[...]})."""
+    if isinstance(data, list):
+        return data
+    if isinstance(data, dict):
+        return data.get("pairs") or data.get("data") or data.get("groups") or []
+    return []
 
-    Diurutkan server berdasarkan aktivitas; kita berhenti begitu cukup supaya
-    run cepat. Return list of dict ter-normalisasi.
+
+def _fetch_paginated(max_pools: int, page_size: int) -> List[Dict[str, Any]]:
+    """
+    Endpoint utama: /pair/all_with_pagination.
+    Param di-minimal-kan (hanya page & limit) karena kombinasi sort_key/order_by
+    tertentu bisa memicu 404 di sisi Meteora. Sudah terurut aktivitas dari server.
     """
     pools: List[Dict[str, Any]] = []
     page = 0
     while len(pools) < max_pools:
-        data = http.get_json(
-            PAIR_PAGINATED,
-            params={
-                "page": page,
-                "limit": page_size,
-                # urut dari volume 24h tertinggi -> kandidat fee bagus duluan
-                "sort_key": "volume",
-                "order_by": "desc",
-            },
-        )
+        data = http.get_json(PAIR_PAGINATED, params={"page": page, "limit": page_size})
         if not data:
             break
-
-        # API kadang bungkus list di key "pairs" / "data", kadang list langsung.
-        rows = data.get("pairs") if isinstance(data, dict) else data
+        rows = _rows_from(data)
         if not rows:
             break
-
         for pair in rows:
             try:
                 pools.append(_normalize(pair))
-            except Exception as e:  # noqa: BLE001 — jangan biarkan 1 baris rusak crash run
+            except Exception as e:  # noqa: BLE001
                 log.debug("skip pool malformed: %s", e)
             if len(pools) >= max_pools:
                 break
-
-        # Kalau halaman lebih kecil dari page_size, sudah habis.
         if len(rows) < page_size:
             break
         page += 1
+    return pools
+
+
+def _fetch_all_fallback(max_pools: int) -> List[Dict[str, Any]]:
+    """
+    Fallback: /pair/all (tanpa paginasi, kembalikan semua). Bisa besar, jadi kita
+    urutkan client-side by volume 24h desc lalu ambil top `max_pools`.
+    """
+    data = http.get_json(PAIR_ALL)
+    rows = _rows_from(data)
+    if not rows:
+        return []
+    pools = []
+    for pair in rows:
+        try:
+            pools.append(_normalize(pair))
+        except Exception as e:  # noqa: BLE001
+            log.debug("skip pool malformed: %s", e)
+    pools.sort(key=lambda p: p.get("volume_24h_usd", 0.0), reverse=True)
+    return pools[:max_pools]
+
+
+def fetch_pools(max_pools: int, page_size: int = 100) -> List[Dict[str, Any]]:
+    """
+    Ambil pool DLMM Meteora ter-normalisasi (maks `max_pools`).
+
+    Strategi tahan-banting: coba endpoint paginasi dulu; kalau gagal/kosong
+    (mis. 404), jatuh ke /pair/all lalu urut client-side. Return list dict.
+    """
+    pools = _fetch_paginated(max_pools, page_size)
+    if not pools:
+        log.info("Meteora: paginasi kosong/gagal -> coba fallback /pair/all")
+        pools = _fetch_all_fallback(max_pools)
 
     log.info("Meteora: %d pool diambil", len(pools))
     return pools

@@ -106,7 +106,13 @@ def request_json(
 
         if resp.status_code >= 400:
             # Error klien (4xx selain 429) biasanya permanen => jangan retry.
-            log.info("HTTP %s %s -> %d (tidak di-retry)", method, host, resp.status_code)
+            # Log potongan body utk diagnosa (mis. kenapa 404/400).
+            body = ""
+            try:
+                body = resp.text[:200].replace("\n", " ")
+            except Exception:  # noqa: BLE001
+                pass
+            log.info("HTTP %s %s -> %d (tidak di-retry) body=%s", method, host, resp.status_code, body)
             return None
 
         try:
