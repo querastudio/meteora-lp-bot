@@ -6,6 +6,14 @@ on:
   schedule:
     - cron: "*/5 * * * *"
   workflow_dispatch:
+    inputs:
+      mode:
+        description: "scan = pipeline normal | test_notify = kirim contoh notif (data sintetis, bukan real)"
+        type: choice
+        default: scan
+        options:
+          - scan
+          - test_notify
 
 # Cegah run tumpang tindih: kalau run sebelumnya belum selesai, run baru menunggu
 # (bukan membatalkan) supaya penulisan state tak korup / bertabrakan.
@@ -35,6 +43,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Run screening
+        if: ${{ inputs.mode != 'test_notify' }}
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
@@ -44,7 +53,15 @@ jobs:
           NARRATIVE_ENABLED: ${{ vars.NARRATIVE_ENABLED || 'true' }}
         run: python main.py
 
+      - name: Kirim contoh notifikasi (test_notify, data sintetis)
+        if: ${{ inputs.mode == 'test_notify' }}
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python test_notify.py
+
       - name: Commit state (anti-duplikat + riwayat ATH)
+        if: ${{ inputs.mode != 'test_notify' }}
         # Simpan state antar-run dengan commit balik ke repo. Pakai [skip ci]
         # supaya commit ini TIDAK memicu workflow lagi (hindari loop).
         run: |

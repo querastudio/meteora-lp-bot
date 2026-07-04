@@ -1,0 +1,109 @@
+"""
+test_notify.py — Kirim CONTOH notifikasi Telegram dgn data sintetis (bukan real).
+
+Tujuan: user bisa lihat tampilan format notifikasi terbaru (semua fitur: ATH
+dgn sumber GeckoTerminal, cluster/bundle detection, narasi Viralitas+Daya
+Tahan+Reddit+evidence, link X, dst.) tanpa perlu menunggu token asli lolos
+semua gate. TIDAK menyentuh state_data.json, TIDAK menjalankan pipeline nyata.
+"""
+
+import logging
+
+import notify
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+log = logging.getLogger("test_notify")
+
+
+def build_sample_ctx() -> dict:
+    symbol = "PEPEC"
+    mint = "PePeCMintExampleXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+    pool_addr = "PoolExampleXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+
+    pool = {
+        "address": pool_addr, "name": f"{symbol}-SOL",
+        "tvl_usd": 18500, "bin_step": 100, "base_fee_pct": 2.0,
+        "_cum_fee_sol": 32.4, "_quote_symbol": "SOL",
+    }
+    metrics = {
+        "market_cap": 610000, "volume_h24": 2100000,
+        "symbol": symbol, "price_usd": 0.00812,
+    }
+    sec = {"mint_authority": None, "freeze_authority": None, "transfer_fee_bps": 0}
+    hold = {
+        "available": True, "top10_pct": 21.4, "top10_gate_pass": True,
+        "fresh_count": 2, "largest_cluster_pct": 12.5, "largest_cluster_wallets": 3,
+        "cluster_gate_pass": True,
+    }
+    lp = {
+        "fee_tvl_daily_pct": 6.8, "vol_tvl": 3.2, "lp_conc_score": 0.82,
+        "pool_age_hours": 96, "fee_estimated": False,
+    }
+    vol = {"note": "turun bertahap, volume tahan 4 hari", "vertical_death": False}
+    ath_info = {
+        "making_new_ath": True, "cold_start": False,
+        "source": "GeckoTerminal (riwayat lengkap)",
+    }
+    narrative = {
+        "category": "animal", "keyword": symbol, "score": 0.88,
+        "viral_label": "🔥 SANGAT VIRAL", "durability_label": "TAHAN LAMA",
+        "breadth_score": 1.0, "volume_score": 0.82, "diversity_score": 0.9,
+        "durability_score": 0.95,
+        "insights": [
+            "aktif di 4/4 platform (bukan 1 sumber saja)",
+            "8 subreddit & 11 channel berbeda ikut bahas -- indikasi organik lintas komunitas",
+        ],
+        "evidence": [
+            {
+                "text": f"{symbol} community growing fast, new memes every day",
+                "source": "Reddit r/CryptoMoonShots (1800 upvote)",
+                "url": "https://reddit.com/r/example/1",
+            },
+            {
+                "text": f"KOL bullposting {symbol} sebagai narasi memecoin cycle baru",
+                "source": "News: ExampleCrypto",
+                "url": "https://example.com/news/1",
+            },
+        ],
+        "trends": {"available": True, "rising": True, "sustained": True, "avg": 68.0},
+        "youtube": {"available": True, "video_count": 22, "total_views": 1250000, "channel_count": 11},
+        "reddit": {
+            "available": True, "post_count": 35, "total_score": 7200,
+            "total_comments": 980, "subreddit_count": 8, "posts_last24h": 6,
+        },
+        "news": {"available": True, "article_count": 12, "domain_count": 6},
+    }
+    warnings = ["LP-lock belum terverifikasi otomatis — cek manual"]
+
+    links = notify.build_manual_links(mint, pool_addr, symbol)
+
+    return {
+        "verdict": "STRONG",
+        "score": 91,
+        "symbol": symbol,
+        "mint": mint,
+        "metrics": metrics,
+        "pool_data": pool,
+        "security": sec,
+        "holders": hold,
+        "lp": lp,
+        "vol": vol,
+        "narrative": narrative,
+        "ath_info": ath_info,
+        "warnings": warnings,
+        "links": links,
+    }
+
+
+def main() -> None:
+    ctx = build_sample_ctx()
+    text = "🧪 <b>INI CONTOH/TEST</b> — bukan sinyal beli sungguhan\n\n" + notify.format_message(ctx)
+    ok = notify.send(text)
+    if ok:
+        log.info("Test notifikasi terkirim.")
+    else:
+        log.error("Gagal kirim test notifikasi -- cek TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID.")
+
+
+if __name__ == "__main__":
+    main()
