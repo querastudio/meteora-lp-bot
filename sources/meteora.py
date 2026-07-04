@@ -40,25 +40,46 @@ _MET_HEADERS = {
 
 # Cloudflare Meteora memblokir IP data-center (mis. runner GitHub Actions -> 404).
 # Relay publik mengambil data dari IP-nya sendiri (tak diblokir) lalu meneruskan.
-# Set METEORA_PROXY="" untuk mematikan relay (mis. saat run dari IP residential).
+# Kita coba beberapa relay berantai karena relay gratis sering flaky/timeout.
+# Override daftar via env METEORA_PROXY (pisah koma). Set METEORA_PROXY=off utk mematikan.
 # {url} diganti URL Meteora lengkap yang sudah di-URL-encode.
-_PROXY_TMPL = os.getenv("METEORA_PROXY", "https://api.allorigins.win/raw?url={url}")
+_DEFAULT_PROXIES = [
+    "https://api.codetabs.com/v1/proxy/?quest={url}",
+    "https://corsproxy.io/?url={url}",
+    "https://api.allorigins.win/raw?url={url}",
+]
+
+
+def _proxy_list() -> List[str]:
+    env = os.getenv("METEORA_PROXY", "").strip()
+    if env.lower() == "off":
+        return []
+    if env:
+        return [p.strip() for p in env.split(",") if p.strip()]
+    return _DEFAULT_PROXIES
 
 
 def _get_meteora(base_url: str, params: Optional[Dict[str, Any]] = None) -> Optional[Any]:
     """
     Ambil JSON dari Meteora. Coba langsung dulu; kalau gagal (mis. Cloudflare 404
-    karena IP CI diblokir) dan relay diaktifkan, ulangi lewat relay publik.
+    karena IP CI diblokir), coba tiap relay berurutan sampai ada yang berhasil.
     """
     data = http.get_json(base_url, params=params, headers=_MET_HEADERS)
     if data:
         return data
-    if not _PROXY_TMPL:
-        return None
+
     full = base_url + ("?" + urlencode(params) if params else "")
-    proxied = _PROXY_TMPL.format(url=quote(full, safe=""))
-    log.info("Meteora: request langsung gagal -> coba lewat relay proxy")
-    return http.get_json(proxied)
+    encoded = quote(full, safe="")
+    for tmpl in _proxy_list():
+        proxied = tmpl.format(url=encoded)
+        host = tmpl.split("/")[2] if "//" in tmpl else tmpl
+        log.info("Meteora: request langsung gagal -> coba relay %s", host)
+        # relay bisa lambat -> beri timeout lebih longgar, tanpa retry berlebihan
+        data = http.get_json(proxied, timeout=25, max_retries=1)
+        if data and _rows_from(data):
+            log.info("Meteora: relay %s berhasil", host)
+            return data
+    return None
 
 
 def _to_float(v: Any, default: float = 0.0) -> float:

@@ -42,6 +42,9 @@ jobs:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
           # Override threshold/bobot lewat repo Variables bila mau (opsional):
           NARRATIVE_ENABLED: ${{ vars.NARRATIVE_ENABLED || 'true' }}
+          # Relay Meteora (opsional). Kosong = pakai daftar relay default.
+          # Isi dengan URL Cloudflare Worker sendiri untuk keandalan maksimal.
+          METEORA_PROXY: ${{ vars.METEORA_PROXY }}
         run: python main.py
 
       - name: Commit state (anti-duplikat + riwayat ATH)
