@@ -1,49 +1,54 @@
 {
 "tokens": {
 "48oT2QgpyPFUiJYXbvZTS1tVDp98R9uYAJX5ojNrpump": {
-"ath": 0.0004921,
+"ath": 0.0009828609052174209,
 "last_notified_ts": 1783158621.4403977,
 "last_verdict": "WATCH",
 "price_history": [
 0.0004921,
-0.0004755
+0.0004755,
+0.0004309
 ],
 "symbol": "SEMAN"
 },
 "9cRCn9rGT8V2imeM2BaKs13yhMEais3ruM3rPvTGpump": {
-"ath": 0.3565,
+"ath": 0.39250200847458716,
 "price_history": [
 0.3565,
-0.3465
+0.3465,
+0.3461
 ],
 "symbol": "ANSEM"
 },
 "CFPkPq1eYPR8GLzEo59wUbbMioX4bshaTQiSGzTSpump": {
-"ath": 0.001481,
+"ath": 0.0026870532488566016,
 "price_history": [
 0.001481,
-0.001401
+0.001401,
+0.001463
 ],
 "symbol": "MENSA"
 },
 "DdPrHYqM8Ueovnk9kAnAgoGhswkuaTqmxcoZzU3Zpump": {
-"ath": 0.01688,
+"ath": 0.020803282954980264,
 "price_history": [
 0.01688,
-0.01667
+0.01667,
+0.01815
 ],
 "symbol": "manlet"
 },
 "HMSPnngim78o9t2KVfGBEg79NGS1s3c1AyRFu8z3pump": {
-"ath": 0.0003244,
+"ath": 0.0015987618911484833,
 "last_notified_ts": 1783158646.1282156,
 "last_verdict": "WATCH",
 "price_history": [
 0.0003244,
-0.0002946
+0.0002946,
+0.0002823
 ],
 "symbol": "FABLE"
 }
 },
-"updated_at": 1783159403.6089325
+"updated_at": 1783159907.8849552
 }
