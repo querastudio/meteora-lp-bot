@@ -19,7 +19,9 @@ Kita ambil pool terurut dari yang aktivitasnya tinggi, lalu screening di pipelin
 """
 
 import logging
-from typing import Any, Dict, List
+import os
+from typing import Any, Dict, List, Optional
+from urllib.parse import quote, urlencode
 
 from sources import http
 
@@ -35,6 +37,28 @@ _MET_HEADERS = {
     "Referer": "https://app.meteora.ag/",
     "Origin": "https://app.meteora.ag",
 }
+
+# Cloudflare Meteora memblokir IP data-center (mis. runner GitHub Actions -> 404).
+# Relay publik mengambil data dari IP-nya sendiri (tak diblokir) lalu meneruskan.
+# Set METEORA_PROXY="" untuk mematikan relay (mis. saat run dari IP residential).
+# {url} diganti URL Meteora lengkap yang sudah di-URL-encode.
+_PROXY_TMPL = os.getenv("METEORA_PROXY", "https://api.allorigins.win/raw?url={url}")
+
+
+def _get_meteora(base_url: str, params: Optional[Dict[str, Any]] = None) -> Optional[Any]:
+    """
+    Ambil JSON dari Meteora. Coba langsung dulu; kalau gagal (mis. Cloudflare 404
+    karena IP CI diblokir) dan relay diaktifkan, ulangi lewat relay publik.
+    """
+    data = http.get_json(base_url, params=params, headers=_MET_HEADERS)
+    if data:
+        return data
+    if not _PROXY_TMPL:
+        return None
+    full = base_url + ("?" + urlencode(params) if params else "")
+    proxied = _PROXY_TMPL.format(url=quote(full, safe=""))
+    log.info("Meteora: request langsung gagal -> coba lewat relay proxy")
+    return http.get_json(proxied)
 
 
 def _to_float(v: Any, default: float = 0.0) -> float:
@@ -93,9 +117,7 @@ def _fetch_paginated(max_pools: int, page_size: int) -> List[Dict[str, Any]]:
     pools: List[Dict[str, Any]] = []
     page = 0
     while len(pools) < max_pools:
-        data = http.get_json(
-            PAIR_PAGINATED, params={"page": page, "limit": page_size}, headers=_MET_HEADERS
-        )
+        data = _get_meteora(PAIR_PAGINATED, params={"page": page, "limit": page_size})
         if not data:
             break
         rows = _rows_from(data)
@@ -119,7 +141,7 @@ def _fetch_all_fallback(max_pools: int) -> List[Dict[str, Any]]:
     Fallback: /pair/all (tanpa paginasi, kembalikan semua). Bisa besar, jadi kita
     urutkan client-side by volume 24h desc lalu ambil top `max_pools`.
     """
-    data = http.get_json(PAIR_ALL, headers=_MET_HEADERS)
+    data = _get_meteora(PAIR_ALL)
     rows = _rows_from(data)
     if not rows:
         return []
