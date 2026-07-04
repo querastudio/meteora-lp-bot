@@ -1,0 +1,44 @@
+{
+"tokens": {
+"48oT2QgpyPFUiJYXbvZTS1tVDp98R9uYAJX5ojNrpump": {
+"ath": 0.0004921,
+"last_notified_ts": 1783158621.4403977,
+"last_verdict": "WATCH",
+"price_history": [
+0.0004921
+],
+"symbol": "SEMAN"
+},
+"9cRCn9rGT8V2imeM2BaKs13yhMEais3ruM3rPvTGpump": {
+"ath": 0.3565,
+"price_history": [
+0.3565
+],
+"symbol": "ANSEM"
+},
+"CFPkPq1eYPR8GLzEo59wUbbMioX4bshaTQiSGzTSpump": {
+"ath": 0.001481,
+"price_history": [
+0.001481
+],
+"symbol": "MENSA"
+},
+"DdPrHYqM8Ueovnk9kAnAgoGhswkuaTqmxcoZzU3Zpump": {
+"ath": 0.01688,
+"price_history": [
+0.01688
+],
+"symbol": "manlet"
+},
+"HMSPnngim78o9t2KVfGBEg79NGS1s3c1AyRFu8z3pump": {
+"ath": 0.0003244,
+"last_notified_ts": 1783158646.1282156,
+"last_verdict": "WATCH",
+"price_history": [
+0.0003244
+],
+"symbol": "FABLE"
+}
+},
+"updated_at": 1783158657.6700928
+}
