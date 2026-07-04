@@ -21,8 +21,18 @@ import config
 log = logging.getLogger("http")
 
 # Session global (reuse koneksi TCP => lebih cepat di runner).
+# Pakai User-Agent seperti browser: beberapa API (mis. Meteora di balik Cloudflare)
+# membalas 404/403 untuk UA "bot" custom. UA browser lolos soft-block ini.
 _session = requests.Session()
-_session.headers.update({"User-Agent": "meteora-lp-bot/1.0 (+github-actions)"})
+_session.headers.update(
+    {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+        ),
+        "Accept": "application/json, text/plain, */*",
+    }
+)
 
 # Throttle per-host: simpan timestamp request terakhir agar tak menembak beruntun.
 _last_call_lock = threading.Lock()
