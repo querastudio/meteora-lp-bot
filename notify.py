@@ -94,7 +94,8 @@ def format_message(ctx: Dict[str, Any]) -> str:
         ath_txt = "mencetak baru ✅"
     else:
         ath_txt = "dekat ATH ✅"
-    lines.append(f"─ ATH: {ath_txt}")
+    ath_src = ath_info.get("source", "")
+    lines.append(f"─ ATH: {ath_txt} <i>({ath_src})</i>" if ath_src else f"─ ATH: {ath_txt}")
     lines.append(
         f"─ TVL ${_h(p['tvl_usd'])} | Bin {p['bin_step']} | Base {p['base_fee_pct']}% | "
         f"Quote {p.get('_quote_symbol','?')} ✅"

@@ -21,7 +21,7 @@ import notify
 import scoring
 import state as state_mod
 from screening import hard_filters, holders, lp_quality, volatility
-from sources import dexscreener, helius, meteora, narrative
+from sources import dexscreener, geckoterminal, helius, meteora, narrative
 
 logging.basicConfig(
     level=logging.INFO,
@@ -82,10 +82,14 @@ def _process_candidate(pool: Dict[str, Any], st: Dict[str, Any], sol_price: floa
         return False
 
     symbol = metrics["symbol"]
-    # Catat harga & ambil ATH tercatat SEBELUM update (utk proximity check).
-    prev_ath = state_mod.record_price(st, mint, metrics["price_usd"], symbol)
+    # ATH sungguhan (candle OHLCV GeckoTerminal, ~6 bulan riwayat) -- degrade
+    # gracefully ke None kalau pool belum terindeks / API gagal.
+    gt_ath = geckoterminal.get_pool_ath(pool["address"])
+    # Catat harga & ambil ATH-baseline SEBELUM update (gabungan state + GeckoTerminal).
+    prev_ath = state_mod.record_price(st, mint, metrics["price_usd"], symbol, external_ath_hint=gt_ath or 0.0)
 
     ok2, reasons2, ath_info = hard_filters.stage2_token(metrics, prev_ath)
+    ath_info["source"] = "GeckoTerminal (riwayat lengkap)" if gt_ath else "proxy sejak bot mengamati"
     if not ok2:
         log.info("S2 gugur $%s: %s", symbol, reasons2)
         return False

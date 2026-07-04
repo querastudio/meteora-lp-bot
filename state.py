@@ -71,15 +71,30 @@ def get_token(state: Dict[str, Any], mint: str) -> Dict[str, Any]:
     return state["tokens"].get(mint, {})
 
 
-def record_price(state: Dict[str, Any], mint: str, price: float, symbol: str = "") -> float:
+def record_price(
+    state: Dict[str, Any],
+    mint: str,
+    price: float,
+    symbol: str = "",
+    external_ath_hint: float = 0.0,
+) -> float:
     """
-    Catat harga terbaru; update ATH (proxy). Return ATH tercatat SEBELUM update
-    (dipakai Stage 2 utk cek proximity vs harga sekarang).
+    Catat harga terbaru; update ATH. Return ATH-baseline SEBELUM update harga
+    sekarang (dipakai Stage 2 utk cek proximity/making-new-ATH).
+
+    external_ath_hint: ATH sungguhan dari sumber luar (GeckoTerminal OHLCV,
+    lihat sources/geckoterminal.py) yang mencakup riwayat SEBELUM bot mulai
+    mengamati token ini. Kalau lebih tinggi dari ATH yang sudah tercatat di
+    state, kita adopsi sbg baseline baru -- supaya Stage 2 tak keliru
+    menganggap harga rendah sbg "ATH baru" hanya karena bot baru mulai lihat
+    token ini (lihat README bagian keterbatasan ATH).
     """
     tok = state["tokens"].setdefault(
         mint, {"ath": 0.0, "price_history": [], "symbol": symbol}
     )
-    prev_ath = float(tok.get("ath", 0.0))
+    # Baseline ATH = maksimum dari yang sudah tercatat vs hint eksternal.
+    prev_ath = max(float(tok.get("ath", 0.0)), float(external_ath_hint or 0.0))
+    tok["ath"] = prev_ath
 
     hist: List[float] = tok.get("price_history", [])
     if price > 0:

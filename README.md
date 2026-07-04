@@ -155,12 +155,17 @@ dan workflow memakai `concurrency` guard supaya run tak tumpang tindih / merusak
 Bot ini **tidak scraping** hal-hal berikut — sebagai gantinya menyediakan **link
 siap-klik** di tiap notifikasi untuk verifikasi manual:
 
-- **ATH presisi sepanjang masa** → yang dipakai adalah ATH **sejak bot mulai
-  mengamati** (proxy dari state). Butuh minimal beberapa run untuk baseline stabil.
-  Saat token BARU pertama diamati (belum ada riwayat), bot **tidak** asal klaim
-  "mencetak ATH baru" — dicek dulu tren `price_change_h24/h6`; kalau sedang turun
-  konsisten, gate digagalkan (bukan lolos otomatis). Notifikasi menandai kasus ini
-  sebagai "data awal ⚠️" agar jujur ke user, bukan "mencetak baru" yang salah.
+- **ATH sungguhan** → Dexscreener (API gratis) **tidak** menyediakan riwayat harga
+  historis, cuma harga saat ini + persen perubahan h1/h6/h24. Sebagai gantinya bot
+  memakai **GeckoTerminal** (produk CoinGecko, gratis, no API key, `sources/geckoterminal.py`)
+  yang menyediakan candle OHLCV harian hingga **~6 bulan ke belakang** — kita ambil
+  `high` tertinggi dari candle tsb sbg ATH sungguhan, digabung dengan riwayat state
+  bot sendiri (`state.py`) sbg pelengkap/fallback kalau pool belum terindeks
+  GeckoTerminal atau API-nya bermasalah (`GECKOTERMINAL_ATH_ENABLED=false` utk
+  matikan). Kalau kedua sumber kosong (pool sangat baru, cold-start), bot TIDAK
+  asal klaim "mencetak ATH baru" — dicek dulu tren `price_change_h24/h6`; kalau
+  sedang turun konsisten, gate digagalkan. Notifikasi selalu menandai sumber ATH
+  yang dipakai ("GeckoTerminal" vs "proxy sejak bot mengamati") agar transparan.
 - **LP-lock / likuiditas dev terkunci** → tak bisa dipastikan 100% gratis → ditandai
   ⚠️ dan verdict STRONG diturunkan ke WATCH (lihat `DOWNGRADE_ON_WARN`). Cek manual
   via RugCheck/GMGN.

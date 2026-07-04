@@ -45,6 +45,8 @@ _MIN_INTERVAL = {
     "trends.google.com": 1.0,
     "www.googleapis.com": 0.2,
     "news.google.com": 0.5,
+    # GeckoTerminal free tier: 30 call/menit -> jeda 2.1s aman (1 call/~2s).
+    "api.geckoterminal.com": 2.1,
 }
 
 
