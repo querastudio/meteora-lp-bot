@@ -157,6 +157,10 @@ siap-klik** di tiap notifikasi untuk verifikasi manual:
 
 - **ATH presisi sepanjang masa** → yang dipakai adalah ATH **sejak bot mulai
   mengamati** (proxy dari state). Butuh minimal beberapa run untuk baseline stabil.
+  Saat token BARU pertama diamati (belum ada riwayat), bot **tidak** asal klaim
+  "mencetak ATH baru" — dicek dulu tren `price_change_h24/h6`; kalau sedang turun
+  konsisten, gate digagalkan (bukan lolos otomatis). Notifikasi menandai kasus ini
+  sebagai "data awal ⚠️" agar jujur ke user, bukan "mencetak baru" yang salah.
 - **LP-lock / likuiditas dev terkunci** → tak bisa dipastikan 100% gratis → ditandai
   ⚠️ dan verdict STRONG diturunkan ke WATCH (lihat `DOWNGRADE_ON_WARN`). Cek manual
   via RugCheck/GMGN.

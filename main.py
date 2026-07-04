@@ -100,6 +100,8 @@ def _process_candidate(pool: Dict[str, Any], st: Dict[str, Any], sol_price: floa
         return False
 
     warnings: List[str] = list(warn3)
+    if ath_info.get("cold_start"):
+        warnings.append("ATH: data baru dikumpulkan, belum ada riwayat penuh")
 
     # ---- STAGE 4: distribusi holder (hard gate top10 + soft heuristik) ----
     hold = holders.analyze(mint, sol_price)

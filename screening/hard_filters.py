@@ -81,6 +81,13 @@ def stage2_token(
     Token dianggap lolos ATH bila harga sekarang >= (1 - buffer) * ATH tercatat,
     ATAU sedang mencetak ATH baru (harga sekarang >= recorded_ath).
 
+    PENTING (cold start): saat token BARU pertama kali diamati (belum ada
+    recorded_ath di state), kita TIDAK BOLEH asal klaim "mencetak ATH baru" --
+    itu cuma berarti "baru pertama kali kita lihat", bukan bukti harga di
+    puncak. Untuk cold start, pakai price_change_h24/h6 (Dexscreener) sebagai
+    proxy: kalau harga sedang turun konsisten di 2 window terakhir, GAGALKAN
+    gate (jelas bukan ATH), jangan diloloskan.
+
     Catatan keterbatasan: ATH di sini adalah ATH-sejak-bot-mulai-mengamati
     (proxy gratis), bukan ATH sepanjang masa on-chain. Lihat README.
     """
@@ -96,22 +103,35 @@ def stage2_token(
         reasons.append(f"vol24h ${metrics['volume_h24']:,.0f} < ${config.MIN_VOLUME_H24_USD:,.0f}")
 
     price = metrics["price_usd"]
-    # ATH baru bila harga sekarang >= ATH tercatat (atau belum ada catatan).
-    making_new_ath = recorded_ath <= 0 or price >= recorded_ath
-    near_ath = False
-    if recorded_ath > 0:
+    chg_h24 = metrics.get("price_change_h24", 0.0)
+    chg_h6 = metrics.get("price_change_h6", 0.0)
+    cold_start = recorded_ath <= 0
+    # Turun konsisten di 2 window terakhir -> jelas bukan lagi di puncak.
+    declining = chg_h24 < 0 and chg_h6 < 0
+
+    if cold_start:
+        # Belum ada riwayat -> tak bisa klaim ATH baru begitu saja. Pakai tren
+        # harga sbg sanity check: kalau sedang turun, gagalkan gate.
+        making_new_ath = not declining
+        near_ath = False
+    else:
+        making_new_ath = price >= recorded_ath
         near_ath = price >= (1 - config.ATH_PROXIMITY_PCT / 100.0) * recorded_ath
 
     info["making_new_ath"] = making_new_ath
     info["near_ath"] = near_ath
+    info["cold_start"] = cold_start
     info["recorded_ath"] = recorded_ath
     info["new_ath_value"] = max(recorded_ath, price)  # nilai ATH terbaru utk disimpan
 
     # Gate ATH: harus mencetak baru ATAU dalam buffer dari ATH tercatat.
     if not (making_new_ath or near_ath):
         ok = False
-        drop = (1 - price / recorded_ath) * 100 if recorded_ath > 0 else 0
-        reasons.append(f"jauh dari ATH (-{drop:.0f}%)")
+        if cold_start:
+            reasons.append(f"tren turun (h24 {chg_h24:.1f}%, h6 {chg_h6:.1f}%) -- data ATH baru dikumpulkan")
+        else:
+            drop = (1 - price / recorded_ath) * 100 if recorded_ath > 0 else 0
+            reasons.append(f"jauh dari ATH (-{drop:.0f}%)")
 
     return ok, reasons, info
 

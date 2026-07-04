@@ -28,6 +28,9 @@ VERDICT_EMOJI = {"STRONG": "🟢", "WATCH": "🟡", "SKIP": "🔴"}
 # ---------------------------------------------------------------------------
 def build_manual_links(mint: str, pool_addr: str, symbol: str) -> Dict[str, str]:
     q = quote_plus(f"{symbol} solana") if symbol and symbol != "?" else quote_plus(mint)
+    # Cashtag ($TICKER) lebih presisi daripada search nama biasa -- ini format
+    # resmi X untuk mengumpulkan semua post yang menyebut ticker sbg saham/token.
+    cashtag = quote_plus(f"${symbol}") if symbol and symbol != "?" else quote_plus(mint)
     return {
         "Meteora": f"https://app.meteora.ag/dlmm/{pool_addr}",
         "GMGN": f"https://gmgn.ai/sol/token/{mint}",
@@ -37,6 +40,8 @@ def build_manual_links(mint: str, pool_addr: str, symbol: str) -> Dict[str, str]
         "RugCheck": f"https://rugcheck.xyz/tokens/{mint}",
         "pump.fun": f"https://pump.fun/{mint}",
         "X search": f"https://x.com/search?q={q}&f=live",
+        "X Cashtag": f"https://x.com/search?q={cashtag}&src=cashtag_click&f=live",
+        "X Community": f"https://x.com/search?q={q}&f=communities",
         "TikTok": f"https://www.tiktok.com/search?q={q}",
         "Instagram": f"https://www.instagram.com/explore/tags/{quote_plus((symbol or '').lstrip('$'))}/",
     }
@@ -82,8 +87,14 @@ def format_message(ctx: Dict[str, Any]) -> str:
     lines.append(
         f"─ MCap ${_h(m['market_cap'])} {_yn(True)} | Vol24h ${_h(m['volume_h24'])} {_yn(True)}"
     )
-    ath_txt = "mencetak baru" if ctx["ath_info"].get("making_new_ath") else "dekat ATH"
-    lines.append(f"─ ATH: {ath_txt} ✅")
+    ath_info = ctx["ath_info"]
+    if ath_info.get("cold_start"):
+        ath_txt = "data awal (tren harga stabil/naik) ⚠️"
+    elif ath_info.get("making_new_ath"):
+        ath_txt = "mencetak baru ✅"
+    else:
+        ath_txt = "dekat ATH ✅"
+    lines.append(f"─ ATH: {ath_txt}")
     lines.append(
         f"─ TVL ${_h(p['tvl_usd'])} | Bin {p['bin_step']} | Base {p['base_fee_pct']}% | "
         f"Quote {p.get('_quote_symbol','?')} ✅"
@@ -136,6 +147,13 @@ def format_message(ctx: Dict[str, Any]) -> str:
         nw = nar.get("news", {})
         news_txt = f"{nw.get('article_count',0)} artikel" if nw.get("available") else "n/a"
         lines.append(f"─ News: {news_txt} | Kategori: {nar.get('category','?')} | Narasi: {nar.get('label')}")
+        # X (Twitter) tak bisa di-API gratis -> sisipkan link cashtag & community
+        # langsung di blok narasi (bukan cuma di baris link bawah) supaya user
+        # cek "vibe" manual sebagai bagian dari due diligence narasi, bukan afterthought.
+        lines.append(
+            f"─ X (Twitter): {_link('Cashtag $'+sym, links['X Cashtag'])} | "
+            f"{_link('Community', links['X Community'])} — cek manual ⚠️"
+        )
         lines.append("")
 
     # Warnings ringkas
