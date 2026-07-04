@@ -119,10 +119,17 @@ def request_json(
             # Log potongan body utk diagnosa (mis. kenapa 404/400).
             body = ""
             try:
-                body = resp.text[:200].replace("\n", " ")
+                body = resp.text[:160].replace("\n", " ")
             except Exception:  # noqa: BLE001
                 pass
-            log.info("HTTP %s %s -> %d (tidak di-retry) body=%s", method, host, resp.status_code, body)
+            # Log header kunci utk deteksi Cloudflare (server/cf-ray/cf-mitigated).
+            srv = resp.headers.get("server", "")
+            cfray = resp.headers.get("cf-ray", "")
+            cfmit = resp.headers.get("cf-mitigated", "")
+            log.info(
+                "HTTP %s %s -> %d (tidak di-retry) server=%s cf-ray=%s cf-mitigated=%s body=%s",
+                method, host, resp.status_code, srv, cfray, cfmit, body,
+            )
             return None
 
         try:

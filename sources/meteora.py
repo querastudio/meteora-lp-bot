@@ -29,6 +29,13 @@ BASE = "https://dlmm-api.meteora.ag"
 PAIR_PAGINATED = f"{BASE}/pair/all_with_pagination"
 PAIR_ALL = f"{BASE}/pair/all"
 
+# Beberapa API front-end memvalidasi Referer/Origin (menolak request "polos").
+# Kirim seolah datang dari app resmi Meteora.
+_MET_HEADERS = {
+    "Referer": "https://app.meteora.ag/",
+    "Origin": "https://app.meteora.ag",
+}
+
 
 def _to_float(v: Any, default: float = 0.0) -> float:
     try:
@@ -86,7 +93,9 @@ def _fetch_paginated(max_pools: int, page_size: int) -> List[Dict[str, Any]]:
     pools: List[Dict[str, Any]] = []
     page = 0
     while len(pools) < max_pools:
-        data = http.get_json(PAIR_PAGINATED, params={"page": page, "limit": page_size})
+        data = http.get_json(
+            PAIR_PAGINATED, params={"page": page, "limit": page_size}, headers=_MET_HEADERS
+        )
         if not data:
             break
         rows = _rows_from(data)
@@ -110,7 +119,7 @@ def _fetch_all_fallback(max_pools: int) -> List[Dict[str, Any]]:
     Fallback: /pair/all (tanpa paginasi, kembalikan semua). Bisa besar, jadi kita
     urutkan client-side by volume 24h desc lalu ambil top `max_pools`.
     """
-    data = http.get_json(PAIR_ALL)
+    data = http.get_json(PAIR_ALL, headers=_MET_HEADERS)
     rows = _rows_from(data)
     if not rows:
         return []
