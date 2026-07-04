@@ -23,7 +23,7 @@ Token digugurkan sedini mungkin untuk hemat rate limit API gratis.
 | 1 | Hard filter pool (TVL, base fee, bin step, fee global 20 SOL, quote SOL/USDC) | Meteora | Hard gate |
 | 2 | Hard filter token (mcap, vol24h, **ATH proximity**) | Dexscreener+GeckoTerminal | Hard gate |
 | 3 | **Keamanan kontrak** (no-mint, no-freeze, no-tax) | Helius | Hard gate |
-| 4 | Distribusi holder (top10 <30% = gate; fresh/empty wallet = soft) | Helius | Gate + soft |
+| 4 | Distribusi holder (top10 <30%; **cluster/bundle terbesar <25%** = gate; fresh/empty wallet = soft) | Helius | Gate + soft |
 | 5 | Kualitas LP (**fee/TVL harian**, vol/TVL, umur, konsentrasi) | Meteora+Dex | Soft |
 | 6 | Volatilitas "turun-stabil" vs "mati vertikal" | Dexscreener+state | Soft + SKIP |
 | 7 | Narasi: **Viralitas** + **Daya Tahan** (kualitatif+kuantitatif) | Trends/YouTube/Reddit/News | Soft |
@@ -169,7 +169,19 @@ siap-klik** di tiap notifikasi untuk verifikasi manual:
 - **LP-lock / likuiditas dev terkunci** → tak bisa dipastikan 100% gratis → ditandai
   ⚠️ dan verdict STRONG diturunkan ke WATCH (lihat `DOWNGRADE_ON_WARN`). Cek manual
   via RugCheck/GMGN.
-- **Phishing-tag GMGN & cluster visual Bubblemaps** → link manual disediakan.
+- **Cluster/bundle detection (ala GMGN/DevsNightmare/GodMode)** → tool-tool ini
+  proprietary, TIDAK ADA API gratis publik untuk memanggilnya langsung. Bot
+  membangun deteksi cluster SENDIRI pakai Helius (gratis, sudah dipakai):
+  wallet top holder yang "lahir" (tx pertama terlihat) dalam jendela waktu
+  sempit (`CLUSTER_TIME_WINDOW_SECONDS`, default 10 menit) dikelompokkan
+  sbg 1 kemungkinan entitas. Ini **proxy waktu**, BUKAN exact funding-source
+  match seperti GMGN (yang trace persis siapa danai wallet mana) — jadi bisa
+  ada false-negative (cluster asli tak kedeteksi kalau wallet-nya "dipanaskan"/
+  dibuat jauh-jauh hari sebelum dipakai). Hard gate: cluster terbesar <25%
+  supply (`MAX_CLUSTER_SUPPLY_PCT`, dituning di config.py) — sesuai prinsip
+  "bundler boleh ada, asal tak kuasai mayoritas". Untuk verifikasi visual lebih
+  dalam (funding chain sungguhan, phishing-tag), link GMGN/Bubblemaps/
+  DevsNightmare/Deepnets tetap disediakan di notifikasi.
 - **Data X / Instagram / TikTok / Facebook / pump.fun community** → tak ada API
   gratis stabil (API resmi X kini berbayar) → link cashtag/community/search
   siap-klik untuk cek "vibe" manual. Narasi otomatis diproksikan lewat 4 sumber

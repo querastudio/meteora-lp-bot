@@ -157,17 +157,30 @@ def get_token_account_owner(token_account: str) -> Optional[str]:
 
 def get_wallet_activity(owner: str, limit: int = 25) -> Dict[str, Any]:
     """
-    Heuristik umur/aktivitas wallet:
-      { tx_count_sample: int, is_fresh: bool }
+    Heuristik umur/aktivitas wallet + proxy waktu "lahir" wallet -- TANPA call
+    tambahan (dipakai jg utk deteksi cluster/bundle, lihat screening/holders.py).
+
+    Return { tx_count_sample, is_fresh, earliest_seen_ts }.
     is_fresh = jumlah signature <= FRESH_WALLET_MAX_TXS (wallet baru/kosong aktivitas).
+    earliest_seen_ts = blockTime tx TERLAMA dalam batch yg diambil (proxy "wallet
+    dibuat kapan"). Untuk wallet fresh (< `limit` total tx), ini AKURAT (batch
+    mencakup seluruh riwayatnya). Untuk wallet lama/aktif, ini cuma "setidaknya
+    sudah ada sejak X" -- bukan genesis sungguhan, tapi cukup utk deteksi cluster
+    krn bundler/sniper biasanya pakai wallet BARU yg dibuat sesaat sblm launch.
     """
     sigs = _rpc("getSignaturesForAddress", [owner, {"limit": limit}])
     if sigs is None:
-        return {"tx_count_sample": None, "is_fresh": False, "_available": False}
+        return {"tx_count_sample": None, "is_fresh": False, "earliest_seen_ts": None, "_available": False}
     n = len(sigs)
+    earliest_seen_ts = None
+    if sigs:
+        block_times = [s.get("blockTime") for s in sigs if s.get("blockTime")]
+        if block_times:
+            earliest_seen_ts = min(block_times)
     return {
         "tx_count_sample": n,
         "is_fresh": n <= config.FRESH_WALLET_MAX_TXS,
+        "earliest_seen_ts": earliest_seen_ts,
         "_available": True,
     }
 

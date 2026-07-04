@@ -148,10 +148,16 @@ def _process_candidate(pool: Dict[str, Any], st: Dict[str, Any], sol_price: floa
     if ath_info.get("cold_start"):
         warnings.append("ATH: data baru dikumpulkan, belum ada riwayat penuh")
 
-    # ---- STAGE 4: distribusi holder (hard gate top10 + soft heuristik) ----
+    # ---- STAGE 4: distribusi holder (hard gate top10 + cluster + soft heuristik) ----
     hold = holders.analyze(mint, sol_price)
     if hold.get("available") and not hold["top10_gate_pass"]:
         log.info("S4 gugur $%s: top10 %.1f%% >= %.0f%%", symbol, hold["top10_pct"], config.MAX_TOP10_SUPPLY_PCT)
+        return False
+    if hold.get("available") and not hold["cluster_gate_pass"]:
+        log.info(
+            "S4 gugur $%s: cluster terbesar %.1f%% >= %.0f%% (%d wallet dibuat berdekatan -- kemungkinan 1 bundler kuasai mayoritas)",
+            symbol, hold["largest_cluster_pct"], config.MAX_CLUSTER_SUPPLY_PCT, hold["largest_cluster_wallets"],
+        )
         return False
     if not hold.get("available"):
         warnings.append("distribusi holder tak terverifikasi")

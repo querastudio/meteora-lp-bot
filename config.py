@@ -96,6 +96,17 @@ EMPTY_WALLET_SOL_USD = _env_float("EMPTY_WALLET_SOL_USD", 100.0) # saldo SOL < $
 # Proporsi wallet mencurigakan di top20 yang bikin skor turun / SKIP
 SUSPICIOUS_TOP20_PCT_THRESHOLD = _env_float("SUSPICIOUS_TOP20_PCT_THRESHOLD", 30.0)
 
+# --- Deteksi CLUSTER/BUNDLE (ala GMGN/DevsNightmare, versi gratis) ---
+# Proxy: wallet top holder yang "lahir" (tx pertama terlihat) dalam jendela
+# waktu sempit satu sama lain -> kemungkinan 1 entitas pakai banyak wallet
+# (bundler/sniper terkoordinasi). TANPA API call tambahan (pakai data yg sudah
+# diambil utk fresh-wallet check). Bukan exact funding-source match spt GMGN
+# (yang trace siapa danai wallet) -- tapi cukup menangkap pola paling umum:
+# banyak wallet baru dibuat berdekatan sesaat sebelum/saat token diluncurkan.
+CLUSTER_TIME_WINDOW_SECONDS = _env_int("CLUSTER_TIME_WINDOW_SECONDS", 600)  # 10 menit
+# HARD GATE: bundler/cluster boleh ADA, asal tak kuasai mayoritas supply.
+MAX_CLUSTER_SUPPLY_PCT = _env_float("MAX_CLUSTER_SUPPLY_PCT", 25.0)
+
 
 # ---------------------------------------------------------------------------
 # STAGE 5 — METRIK KUALITAS LP

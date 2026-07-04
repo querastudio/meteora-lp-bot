@@ -39,6 +39,10 @@ def build_manual_links(mint: str, pool_addr: str, symbol: str) -> Dict[str, str]
         "DexScreener": f"https://dexscreener.com/solana/{mint}",
         "RugCheck": f"https://rugcheck.xyz/tokens/{mint}",
         "pump.fun": f"https://pump.fun/{mint}",
+        # Bot/web analisis cluster-bundle pihak-ketiga (tak ada API gratis,
+        # jadi cuma link -- paste mint address manual setelah buka).
+        "DevsNightmare": "https://t.me/soldevnightmarebot",
+        "Deepnets": "https://deepnets.ai",
         "X search": f"https://x.com/search?q={q}&f=live",
         "X Cashtag": f"https://x.com/search?q={cashtag}&src=cashtag_click&f=live",
         "X Community": f"https://x.com/search?q={q}&f=communities",
@@ -113,6 +117,15 @@ def format_message(ctx: Dict[str, Any]) -> str:
             f"─ Top10: {h['top10_pct']}% {_yn(h['top10_gate_pass'])} | "
             f"Fresh top20: {h['fresh_count']} {'⚠️' if h['fresh_count'] else '✅'}"
         )
+        cluster_pct = h.get("largest_cluster_pct", 0.0)
+        cluster_n = h.get("largest_cluster_wallets", 0)
+        if cluster_n >= 2:
+            lines.append(
+                f"─ Cluster terbesar: {cluster_pct}% supply / {cluster_n} wallet "
+                f"{_yn(h.get('cluster_gate_pass', True))} <i>(proxy waktu, bukan exact spt GMGN)</i>"
+            )
+        else:
+            lines.append("─ Cluster: tak terdeteksi wallet berdekatan ✅")
     else:
         lines.append("─ Holder: data tak tersedia ⚠️")
     lines.append("")
@@ -207,7 +220,10 @@ def format_message(ctx: Dict[str, Any]) -> str:
 
     # LINK VERIFIKASI MANUAL
     lines.append("🔗 <b>VERIFIKASI MANUAL</b> (klik):")
-    order = ["GMGN", "Bubblemaps", "RugCheck", "SolScan", "pump.fun", "X search", "TikTok", "Instagram"]
+    order = [
+        "GMGN", "Bubblemaps", "DevsNightmare", "Deepnets", "RugCheck", "SolScan",
+        "pump.fun", "X search", "TikTok", "Instagram",
+    ]
     row = " | ".join(_link(k, links[k]) for k in order if k in links)
     lines.append(row)
 
