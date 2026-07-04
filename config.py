@@ -69,7 +69,7 @@ MIN_VOLUME_H24_USD = _env_float("MIN_VOLUME_H24_USD", 1_000_000)
 # ATH check: token dianggap "dekat ATH" jika harga saat ini >= (1 - buffer) * ATH.
 # Riwayat ATH disimpan di state file (lihat state.py). Ini hard gate momentum
 # (terbukti efektif untuk user) — tapi butuh minimal 1 run sebelumnya utk baseline.
-ATH_PROXIMITY_PCT = _env_float("ATH_PROXIMITY_PCT", 5.0)  # dalam 5% dari ATH tercatat
+ATH_PROXIMITY_PCT = _env_float("ATH_PROXIMITY_PCT", 20.0)  # dalam 20% dari ATH tercatat
 # ATH sungguhan (bukan cuma sejak-bot-mengamati) diambil dari candle OHLCV
 # GeckoTerminal (gratis, no key, ~6 bulan riwayat). Matikan bila API ini
 # bermasalah/diblokir -- bot otomatis kembali ke proxy riwayat state sendiri.
