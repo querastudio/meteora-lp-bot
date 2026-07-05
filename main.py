@@ -21,7 +21,7 @@ import notify
 import scoring
 import state as state_mod
 from screening import hard_filters, holders, lp_quality, volatility
-from sources import dexscreener, geckoterminal, gemini, groq, helius, lunarcrush, meteora, narrative
+from sources import dexscreener, geckoterminal, gemini, groq, helius, meteora, narrative
 
 logging.basicConfig(
     level=logging.INFO,
@@ -174,13 +174,8 @@ def _process_candidate(pool: Dict[str, Any], st: Dict[str, Any], sol_price: floa
         vwap_pool_address = metrics.get("pair_address") or pool["address"]
         vwap = geckoterminal.vwap_signal(vwap_pool_address, metrics["price_usd"])
 
-    # ---- LUNARCRUSH (opsional, BERBAYAR -- Galaxy Score/sentiment X) ----
-    # Nyaris selalu n/a utk token super baru (belum ter-index LunarCrush),
-    # itu wajar -- degrade gracefully, lihat sources/lunarcrush.py.
-    lc = lunarcrush.social_signal(symbol)
-
     # ---- SCORING & VERDICT ----
-    scored = scoring.compute(lp, vol, hold, nar, warnings, vwap, lc)
+    scored = scoring.compute(lp, vol, hold, nar, warnings, vwap)
     verdict = scored["verdict"]
     log.info("$%s -> %s (skor %.0f) breakdown=%s", symbol, verdict, scored["score"], scored["breakdown"])
 
@@ -205,7 +200,6 @@ def _process_candidate(pool: Dict[str, Any], st: Dict[str, Any], sol_price: floa
         "lp": lp,
         "vol": vol,
         "vwap": vwap,
-        "lunarcrush": lc,
         "narrative": nar,
         "warnings": warnings,
         "links": links,

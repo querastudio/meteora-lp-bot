@@ -55,9 +55,6 @@ _MIN_INTERVAL = {
     "generativelanguage.googleapis.com": 3.0,
     # Groq free tier ~30 req/menit -> jeda >2s aman.
     "api.groq.com": 2.1,
-    # LunarCrush (berbayar, tier Individual) -- jeda konservatif, blm ada
-    # angka rate-limit resmi yg kita pakai jadi aman lebih lambat.
-    "lunarcrush.com": 1.0,
 }
 
 
