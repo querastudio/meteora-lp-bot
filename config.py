@@ -171,7 +171,7 @@ NARRATIVE_NEWS_DOMAIN_CAP = _env_float("NARRATIVE_NEWS_DOMAIN_CAP", 8)
 # sudah lolos filter relevansi. Skor dikalikan (0.6-1.0), TIDAK additif,
 # dan TIDAK pernah menyentuh hard gate keamanan/holder. Lihat sources/gemini.py.
 GEMINI_NARRATIVE_ENABLED = _env_bool("GEMINI_NARRATIVE_ENABLED", True)
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash-lite")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite")
 
 
 # ---------------------------------------------------------------------------
