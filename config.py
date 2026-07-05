@@ -46,6 +46,7 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 HELIUS_API_KEY = os.getenv("HELIUS_API_KEY", "")
 YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY", "")  # opsional (Stage 7)
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")     # opsional (sintesis narasi AI)
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")         # opsional (fallback sintesis narasi AI)
 
 
 # ---------------------------------------------------------------------------
@@ -172,6 +173,11 @@ NARRATIVE_NEWS_DOMAIN_CAP = _env_float("NARRATIVE_NEWS_DOMAIN_CAP", 8)
 # dan TIDAK pernah menyentuh hard gate keamanan/holder. Lihat sources/gemini.py.
 GEMINI_NARRATIVE_ENABLED = _env_bool("GEMINI_NARRATIVE_ENABLED", True)
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite")
+
+# --- Fallback ke Groq API gratis kalau Gemini gagal/kena limit harian ---
+# Rate limit gratis Groq jauh lebih longgar drpd Gemini -- lihat sources/groq.py.
+GROQ_NARRATIVE_ENABLED = _env_bool("GROQ_NARRATIVE_ENABLED", True)
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 
 
 # ---------------------------------------------------------------------------

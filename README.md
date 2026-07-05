@@ -26,14 +26,16 @@ Token digugurkan sedini mungkin untuk hemat rate limit API gratis.
 | 4 | Distribusi holder (top10 <30%; **cluster/bundle <25%**; **coordinated trading TINGGI** = gate) | Helius | Gate |
 | 5 | Kualitas LP (**fee/TVL harian**, vol/TVL, umur, konsentrasi) | Meteora+Dex | Soft |
 | 6 | Volatilitas "turun-stabil" vs "mati vertikal" | Dexscreener+state | Soft + SKIP |
-| 7 | Narasi: **Viralitas** + **Daya Tahan** (kualitatif+kuantitatif) + AI check organik/terkoordinasi (opsional) | Trends/YouTube/Reddit/News/Gemini | Soft |
+| 7 | Narasi: **Viralitas** + **Daya Tahan** (kualitatif+kuantitatif) + AI check organik/terkoordinasi (opsional) | Trends/YouTube/Reddit/News/Gemini+Groq | Soft |
 | — | Momentum **VWAP** (harga vs rata-rata tertimbang volume sejak pool dibuat) | GeckoTerminal OHLCV | Soft |
 
-**Soal AI check narasi (Gemini, opsional):** hanya menilai apakah kutipan Reddit/News
-yang sudah lolos filter relevansi terlihat organik atau pola shilling terkoordinasi —
-hasilnya cuma MENGALIKAN skor narasi (0.6×-1.0×), bukan hard gate, dan degrade
-gracefully (skor tak berubah) kalau `GEMINI_API_KEY` kosong atau API gagal. Ambil
-key gratis di https://aistudio.google.com/apikey.
+**Soal AI check narasi (Gemini + fallback Groq, opsional):** hanya menilai apakah
+kutipan Reddit/News yang sudah lolos filter relevansi terlihat organik atau pola
+shilling terkoordinasi — hasilnya cuma MENGALIKAN skor narasi (0.6×-1.0×), bukan
+hard gate. Gemini dicoba dulu; kalau gagal/kena limit harian, otomatis fallback
+ke Groq (rate limit gratisnya lebih longgar). Degrade gracefully (skor tak
+berubah) kalau kedua `*_API_KEY` kosong atau API gagal. Ambil key gratis di
+https://aistudio.google.com/apikey (Gemini) dan https://console.groq.com/keys (Groq).
 
 **Hard gate gagal → SKIP (dibuang).** Yang lolos semua hard gate diberi **soft score
 0–100** (bobot bisa dituning di `config.py`) → verdict STRONG/WATCH.
