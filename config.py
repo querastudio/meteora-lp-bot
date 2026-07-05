@@ -179,6 +179,18 @@ GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite")
 GROQ_NARRATIVE_ENABLED = _env_bool("GROQ_NARRATIVE_ENABLED", True)
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 
+# --- Gate bukti minimum sebelum panggil AI narasi ---
+# Kalau Reddit & News keduanya terlalu tipis (mis. cuma 1-2 artikel generik
+# yang bahkan bisa salah topik -- Google News RSS kadang match longgar),
+# LEBIH BAIK skip AI sepenuhnya drpd memaksa dia menilai organik/terkoordinasi
+# dari data hampir kosong (kasus nyata: $HeavyPulp divonis "terkoordinasi"
+# padahal News-nya cuma 2 artikel generik, salah satunya malah soal token
+# lain). Threshold ini SENGAJA beda (lebih ketat) drpd NARRATIVE_MIN_*
+# (yang dipakai utk breadth_score, tujuannya beda -- itu ukur "seberapa
+# ramai", ini ukur "cukup bersih utk diminta opini AI").
+AI_MIN_REDDIT_POSTS = _env_int("AI_MIN_REDDIT_POSTS", 2)
+AI_MIN_NEWS_ARTICLES = _env_int("AI_MIN_NEWS_ARTICLES", 3)
+
 
 # ---------------------------------------------------------------------------
 # SCORING ENGINE — BOBOT SOFT SCORE (total mencerminkan profil pasif-konservatif)

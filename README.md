@@ -37,6 +37,11 @@ ke Groq (rate limit gratisnya lebih longgar). Degrade gracefully (skor tak
 berubah) kalau kedua `*_API_KEY` kosong atau API gagal. Ambil key gratis di
 https://aistudio.google.com/apikey (Gemini) dan https://console.groq.com/keys (Groq).
 
+AI check juga DI-SKIP total kalau bukti Reddit+News terlalu tipis
+(`AI_MIN_REDDIT_POSTS`/`AI_MIN_NEWS_ARTICLES` di config.py) — lebih baik
+"tak menilai" drpd LLM memaksa vonis organik/terkoordinasi dari 1-2 kutipan
+yang bahkan bisa salah topik (Google News RSS kadang match longgar).
+
 **Hard gate gagal → SKIP (dibuang).** Yang lolos semua hard gate diberi **soft score
 0–100** (bobot bisa dituning di `config.py`) → verdict STRONG/WATCH.
 
