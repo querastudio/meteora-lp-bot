@@ -71,6 +71,29 @@ def detect_category(name: str, symbol: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Filter relevansi: simbol umum (mis. $CHANCE, $HOPE) match kata Inggris biasa
+# di berita/post/video yang SAMA SEKALI bukan soal token ini (mis. "Germany's
+# Second Chance for Growth"). Tanpa filter ini breadth/volume/evidence jadi
+# noise murni -- bukan sinyal narasi token, false "VIRAL".
+# ---------------------------------------------------------------------------
+_CRYPTO_CONTEXT_KEYWORDS = (
+    "crypto", "coin", "token", "solana", "memecoin", "meme coin",
+    "blockchain", "dex", "pump.fun", "pumpfun", "web3", "airdrop",
+    "market cap", "mcap", "altcoin", "defi", "trader", "trading",
+)
+
+
+def _looks_crypto_related(text: str, symbol: str) -> bool:
+    """True bila teks eksplisit soal crypto ATAU pakai cashtag simbolnya."""
+    if not text:
+        return False
+    t = text.lower()
+    if f"${symbol.lower()}" in t:
+        return True
+    return any(kw in t for kw in _CRYPTO_CONTEXT_KEYWORDS)
+
+
+# ---------------------------------------------------------------------------
 # Google Trends via pytrends (sinyal daya tahan terkuat: minat msh hidup?)
 # ---------------------------------------------------------------------------
 def google_trends_signal(keyword: str) -> Dict[str, Any]:
@@ -142,6 +165,10 @@ def youtube_signal(keyword: str) -> Dict[str, Any]:
         if not search:
             return out
         items = search.get("items", [])
+        items = [
+            it for it in items
+            if _looks_crypto_related((it.get("snippet") or {}).get("title", ""), keyword)
+        ]
         ids = [it["id"]["videoId"] for it in items if it.get("id", {}).get("videoId")]
         channels = {
             it["snippet"]["channelId"]
@@ -221,6 +248,10 @@ def reddit_signal(keyword: str) -> Dict[str, Any]:
         posts_raw: List[Dict[str, Any]] = []
         for c in children:
             d = c.get("data") or {}
+            if not _looks_crypto_related(
+                f"{d.get('title', '')} {d.get('selftext', '')}", keyword
+            ):
+                continue
             sub = d.get("subreddit")
             if sub:
                 subreddits[sub] += 1
@@ -249,7 +280,7 @@ def reddit_signal(keyword: str) -> Dict[str, Any]:
         out.update(
             {
                 "available": True,
-                "post_count": len(children),
+                "post_count": len(posts_raw),
                 "total_score": total_score,
                 "total_comments": total_comments,
                 "subreddit_count": len(subreddits),
@@ -279,6 +310,13 @@ def google_news_signal(keyword: str) -> Dict[str, Any]:
         domains = set()
         articles: List[Dict[str, Any]] = []
         for it in items:
+            title_el = it.find("title")
+            title_text = title_el.text if title_el is not None and title_el.text else ""
+            # RSS search Google News cuma cocokkan kata literal -- simbol yg
+            # kebetulan kata Inggris umum (mis. $CHANCE) bisa match berita
+            # sama sekali tak relevan (lihat _looks_crypto_related).
+            if not _looks_crypto_related(title_text, keyword):
+                continue
             src = it.find("source")
             source_name = src.text if src is not None and src.text else "?"
             if src is not None and src.get("url"):
@@ -286,12 +324,11 @@ def google_news_signal(keyword: str) -> Dict[str, Any]:
                     domains.add(urlparse(src.get("url")).netloc)
                 except ValueError:
                     pass
-            title_el = it.find("title")
             link_el = it.find("link")
-            if title_el is not None and title_el.text:
+            if title_text:
                 articles.append(
                     {
-                        "title": title_el.text,
+                        "title": title_text,
                         "source": source_name,
                         "url": link_el.text if link_el is not None else "",
                     }
@@ -299,7 +336,7 @@ def google_news_signal(keyword: str) -> Dict[str, Any]:
         out.update(
             {
                 "available": True,
-                "article_count": len(items),
+                "article_count": len(articles),
                 "domain_count": len(domains),
                 # Google News RSS sudah terurut relevansi -> ambil 2 teratas
                 # sbg konteks kualitatif (dipakai notify.py).
