@@ -196,7 +196,12 @@ HTTP_TIMEOUT = _env_int("HTTP_TIMEOUT", 20)
 HTTP_MAX_RETRIES = _env_int("HTTP_MAX_RETRIES", 3)
 HTTP_BACKOFF_BASE = _env_float("HTTP_BACKOFF_BASE", 1.5)  # detik
 # Batasi jumlah pool yang diproses per run agar cron 5 menit selalu selesai cepat.
-MAX_POOLS_PER_RUN = _env_int("MAX_POOLS_PER_RUN", 60)
+# Pool diambil terurut volume_24h:desc (lihat sources/meteora.py) -- makin besar
+# angka ini, makin dalam funnel menjangkau pool BARU (mcap ok tapi volume 24h
+# belum sempat mengejar pool lama). Stage 1 sendiri gratis (tanpa call
+# tambahan), jadi menaikkan ini murah; yang mahal (Helius) tetap dibatasi via
+# MAX_EXPENSIVE_CANDIDATES di bawah.
+MAX_POOLS_PER_RUN = _env_int("MAX_POOLS_PER_RUN", 300)
 # Batasi kandidat yang lolos Stage 1-2 masuk ke stage mahal (Helius) per run.
 MAX_EXPENSIVE_CANDIDATES = _env_int("MAX_EXPENSIVE_CANDIDATES", 15)
 # Anti-spam: interval minimal (jam) sebelum re-notif token yang sama pada verdict sama.
