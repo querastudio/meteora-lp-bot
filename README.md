@@ -94,10 +94,61 @@ Tambahkan:
 ### 5. Enable GitHub Actions
 1. Push repo ini ke GitHub.
 2. Tab **Actions** → aktifkan workflow bila diminta.
-3. Workflow `Meteora LP Screening` jalan otomatis tiap ~5 menit (cron). Bisa juga
+3. Workflow `Meteora LP Screening` PUNYA jadwal `schedule: */5 * * * *`. Bisa juga
    dipicu manual: **Actions → Meteora LP Screening → Run workflow**.
 4. Pastikan Actions punya izin tulis: **Settings → Actions → General → Workflow
    permissions → Read and write permissions** (dibutuhkan untuk commit-back state).
+
+> ⚠️ **PENTING — keterbatasan `schedule` GitHub Actions:** GitHub **secara resmi
+> mendokumentasikan** bahwa jadwal cron yang sangat sering (tiap 5 menit) bisa
+> **ditunda/didegradasi**, terutama untuk repo yang tak terlalu aktif — dalam
+> praktik sering jadi cuma **~1x per jam**, bukan tiap 5 menit. Ini bukan bug di
+> kode bot, ini keterbatasan platform GitHub. Karena memecoin bisa "hidup-mati"
+> dalam hitungan menit-jam, keterlambatan ini bisa bikin banyak token terlewat.
+>
+> **Solusi (opsional tapi disarankan): trigger dari luar via `workflow_dispatch`**
+> (yang TIDAK kena degradasi jadwal, selalu jalan cepat) memakai layanan cron
+> gratis pihak ketiga. Lihat bagian "⏱️ Trigger 5 menit yang andal" di bawah.
+
+---
+
+## ⏱️ Trigger 5 menit yang andal (mengatasi keterbatasan `schedule` GitHub)
+
+Karena `schedule:` bawaan GitHub Actions tak bisa diandalkan utk interval 5 menit
+(lihat catatan di atas), pakai **cron eksternal gratis** ([cron-job.org](https://cron-job.org),
+mendukung interval hingga 1 menit) untuk memanggil `workflow_dispatch` API GitHub
+langsung — jalur ini TIDAK kena degradasi jadwal.
+
+### Langkah 1 — Buat GitHub Token (scope terbatas, cuma repo ini)
+1. GitHub → **Settings** (akun, bukan repo) → **Developer settings** →
+   **Personal access tokens → Fine-grained tokens** → **Generate new token**.
+2. **Resource owner**: akunmu. **Repository access**: **Only select repositories**
+   → pilih `meteora-lp-bot` saja (JANGAN "All repositories" — batasi blast radius).
+3. **Permissions → Repository permissions → Actions**: pilih **Read and write**.
+4. Set masa berlaku (mis. 1 tahun), **Generate token**, salin token-nya
+   (`github_pat_...`) — ini cuma tampil sekali.
+
+### Langkah 2 — Daftar cron-job.org (gratis) & atur job
+1. Daftar di **[cron-job.org](https://console.cron-job.org)**.
+2. **Create cronjob**:
+   - **URL**: `https://api.github.com/repos/querastudio/meteora-lp-bot/actions/workflows/scan.yml/dispatches`
+   - **Request method**: `POST`
+   - **Headers** (tambah 3 baris):
+     - `Accept: application/vnd.github+json`
+     - `Authorization: Bearer <TOKEN_DARI_LANGKAH_1>`
+     - `Content-Type: application/json`
+   - **Body**: `{"ref":"main"}`
+   - **Schedule**: every 5 minutes (`*/5 * * * *`)
+3. Simpan. Cron-job.org akan memanggil GitHub setiap 5 menit persis, memicu
+   workflow lewat `workflow_dispatch` (jalur cepat, bukan `schedule`).
+
+⚠️ **Catatan keamanan**: token GitHub ini tersimpan di server cron-job.org
+(pihak ketiga), bukan di GitHub Secrets. Scope-nya sudah dibatasi HANYA ke repo
+ini + izin Actions saja (bukan akses penuh akun), jadi risiko kalau bocor
+minimal. Kalau ingin berhenti, hapus token di GitHub kapan saja.
+
+Jadwal `schedule` bawaan tetap dibiarkan aktif di `scan.yml` sebagai **cadangan**
+(kalau cron-job.org down, setidaknya masih ada run ~1x/jam dari GitHub sendiri).
 
 ---
 
