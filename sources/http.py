@@ -113,7 +113,12 @@ def request_json(
 
         # Rate limited / server error => retry dengan backoff.
         if resp.status_code in (429, 500, 502, 503, 504):
-            log.warning("HTTP %s %s -> %d (attempt %d)", method, host, resp.status_code, attempt)
+            body = ""
+            try:
+                body = resp.text[:300].replace("\n", " ")
+            except Exception:  # noqa: BLE001
+                pass
+            log.warning("HTTP %s %s -> %d (attempt %d) body=%s", method, host, resp.status_code, attempt, body)
             # Hormati Retry-After bila ada.
             retry_after = resp.headers.get("Retry-After")
             if retry_after and retry_after.isdigit():
