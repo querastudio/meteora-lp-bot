@@ -1,5 +1,11 @@
 {
 "tokens": {
+"3oBRGPMpvR1TpHRx9oMEeJwSgwv7Fo7ndshuu2rQpump": {
+"price_history": [
+0.0003666
+],
+"symbol": "Potato"
+},
 "48oT2QgpyPFUiJYXbvZTS1tVDp98R9uYAJX5ojNrpump": {
 "ath": 0.001331105001714789,
 "last_notified_ts": 1783158621.4403977,
@@ -19,6 +25,12 @@
 0.0001844
 ],
 "symbol": "SEMAN"
+},
+"5pYB12kEhfhSFXJjZ7JtyqDpt6uUqhsF6iu6Ee9spump": {
+"price_history": [
+0.001501
+],
+"symbol": "CATWIF"
 },
 "9cRCn9rGT8V2imeM2BaKs13yhMEais3ruM3rPvTGpump": {
 "ath": 0.3898408900557962,
@@ -84,9 +96,24 @@
 0.2968,
 0.2946,
 0.2959,
-0.2989
+0.2989,
+0.2981
 ],
 "symbol": "ANSEM"
+},
+"B6f27ETGcjgGNB1fqULJbXVmw9FnL8HgBp7R83hmpump": {
+"price_history": [
+0.001931
+],
+"symbol": "drooling"
+},
+"BcHEaaTCvycPwwsJ9yQTXdHP9X2gCLkznDbZ8VySpump": {
+"last_notified_ts": 1783235204.2619,
+"last_verdict": "WATCH",
+"price_history": [
+0.007956
+],
+"symbol": "Jotchua"
 },
 "Bqs76KADGDkiwskqdqTu1jaNrpJyzV5ZxpvJrL5npump": {
 "ath": 0.0026516418437750075,
@@ -127,9 +154,16 @@
 0.001298,
 0.001353,
 0.001341,
-0.001328
+0.001328,
+0.001319
 ],
 "symbol": "Hobbes"
+},
+"C6kWVdLGAE3Eb8Xc6VRZbs9ZvouHhBMYbhd4BVagD4Da": {
+"price_history": [
+0.00104
+],
+"symbol": "TESTIBULL"
 },
 "CFPkPq1eYPR8GLzEo59wUbbMioX4bshaTQiSGzTSpump": {
 "ath": 0.003950286693499151,
@@ -195,7 +229,8 @@
 0.001891,
 0.001867,
 0.001874,
-0.001997
+0.001997,
+0.001978
 ],
 "symbol": "MENSA"
 },
@@ -249,7 +284,8 @@
 0.00129,
 0.00128,
 0.001344,
-0.001276
+0.001276,
+0.001277
 ],
 "symbol": "BABYANSEM"
 },
@@ -317,9 +353,32 @@
 0.01162,
 0.01242,
 0.0118,
-0.01157
+0.01157,
+0.01144
 ],
 "symbol": "manlet"
+},
+"ERPtViqckt1zqpS2abUx67CgLcP54CkhBPYz3yRUpump": {
+"price_history": [
+0.000227
+],
+"symbol": "yep"
+},
+"EmcxFTNVDqyLHp11NvwvLZ4D7LKGbG9i7B8RF7dwpump": {
+"last_notified_ts": 1783235216.4164357,
+"last_verdict": "WATCH",
+"price_history": [
+0.00493
+],
+"symbol": "ZERO"
+},
+"FMqh9mqR6drPZqqW6wPqLHxX4rqNDWGhYLaMfoaJpump": {
+"last_notified_ts": 1783235229.411064,
+"last_verdict": "WATCH",
+"price_history": [
+0.003117
+],
+"symbol": "world"
 },
 "HMSPnngim78o9t2KVfGBEg79NGS1s3c1AyRFu8z3pump": {
 "ath": 0.001643911791110823,
@@ -339,7 +398,21 @@
 0.0003937
 ],
 "symbol": "FABLE"
+},
+"JCKwsT8UAbygnFkZ7u3amDUM7BXRtwUhCsHQv2khpump": {
+"last_notified_ts": 1783235241.7734354,
+"last_verdict": "WATCH",
+"price_history": [
+0.004237
+],
+"symbol": "CHANCE"
+},
+"cvkarf1CtN3tbLRk961vsaEf4T8QbnihDkCHa93pump": {
+"price_history": [
+0.0005242
+],
+"symbol": "NEIL"
 }
 },
-"updated_at": 1783234911.941397
+"updated_at": 1783235242.8082454
 }
