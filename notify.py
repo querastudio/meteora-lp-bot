@@ -78,6 +78,7 @@ def format_message(ctx: Dict[str, Any]) -> str:
     lp = ctx["lp"]
     vol = ctx["vol"]
     vwap = ctx.get("vwap", {})
+    lc = ctx.get("lunarcrush", {})
     nar = ctx["narrative"]
     links = ctx["links"]
     warns: List[str] = ctx.get("warnings", [])
@@ -188,6 +189,15 @@ def format_message(ctx: Dict[str, Any]) -> str:
             lines.append(f"─ News: {nw.get('article_count',0)} artikel dari {nw.get('domain_count',0)} domain berbeda")
         else:
             lines.append("─ News: n/a")
+
+        if lc.get("available"):
+            lines.append(
+                f"─ LunarCrush: Galaxy Score {lc.get('galaxy_score',0):.0f}/100, "
+                f"sentiment {lc.get('sentiment_pct',0):.0f}% positif, "
+                f"{lc.get('num_contributors',0)} kontributor (24j)"
+            )
+        elif config.LUNARCRUSH_ENABLED and config.LUNARCRUSH_API_KEY:
+            lines.append("─ LunarCrush: n/a (belum ter-index -- wajar utk token baru)")
 
         # Insight kualitatif otomatis (rule-based dari kombinasi angka di atas).
         for insight in nar.get("insights", [])[:3]:

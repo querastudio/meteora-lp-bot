@@ -31,6 +31,7 @@ def compute(
     narrative: Dict[str, Any],
     warnings: List[str],
     vwap: Dict[str, Any] = None,
+    lunarcrush: Dict[str, Any] = None,
 ) -> Dict[str, Any]:
     """
     Hitung skor & verdict. Return dict:
@@ -39,6 +40,7 @@ def compute(
     w = config.WEIGHTS
     total_weight = sum(w.values())
     vwap = vwap or {}
+    lunarcrush = lunarcrush or {}
 
     # Skor per komponen (masing-masing 0-1) x bobot.
     components = {
@@ -50,6 +52,7 @@ def compute(
         "holder_health": holders.get("health_score", 0.0) if holders.get("available") else 0.3,
         "narrative": narrative.get("score", 0.0),
         "vwap_momentum": vwap.get("momentum_score", 0.5),
+        "lunarcrush_social": lunarcrush.get("social_score", 0.5),
     }
 
     weighted = sum(components[k] * w[k] for k in components)
