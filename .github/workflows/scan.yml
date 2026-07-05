@@ -50,6 +50,7 @@ jobs:
           HELIUS_API_KEY: ${{ secrets.HELIUS_API_KEY }}
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           # Override threshold/bobot lewat repo Variables bila mau (opsional):
           NARRATIVE_ENABLED: ${{ vars.NARRATIVE_ENABLED || 'true' }}
         run: python main.py

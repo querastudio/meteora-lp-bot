@@ -21,7 +21,7 @@ import notify
 import scoring
 import state as state_mod
 from screening import hard_filters, holders, lp_quality, volatility
-from sources import dexscreener, geckoterminal, gemini, helius, meteora, narrative
+from sources import dexscreener, geckoterminal, gemini, groq, helius, meteora, narrative
 
 logging.basicConfig(
     level=logging.INFO,
@@ -138,8 +138,12 @@ def _process_candidate(pool: Dict[str, Any], st: Dict[str, Any], sol_price: floa
 
     # ---- Sintesis narasi AI (opsional, soft nudge -- lihat sources/gemini.py) ----
     # Cuma nudge nar['score'] dlm rentang 0.6-1.0x, TIDAK pernah menyentuh
-    # hard gate. Degrade gracefully kalau API gagal/key kosong.
+    # hard gate. Coba Gemini dulu; kalau gagal/limit, fallback ke Groq
+    # (rate limit gratisnya lebih longgar). Degrade gracefully kalau
+    # keduanya gagal/key kosong -- skor narasi tetap rule-based biasa.
     nar_ai = gemini.assess_narrative(symbol, nar.get("category", "unknown"), nar)
+    if not nar_ai.get("available"):
+        nar_ai = groq.assess_narrative(symbol, nar.get("category", "unknown"), nar)
     if nar_ai.get("available"):
         nar["score"] = round(nar.get("score", 0.0) * nar_ai["score_multiplier"], 3)
     nar["ai"] = nar_ai

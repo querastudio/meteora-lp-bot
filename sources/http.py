@@ -53,6 +53,8 @@ _MIN_INTERVAL = {
     # Gemini API free tier (model flash-lite) ~15-30 req/menit tergantung
     # model -> jeda konservatif 3s aman utk semua varian free tier.
     "generativelanguage.googleapis.com": 3.0,
+    # Groq free tier ~30 req/menit -> jeda >2s aman.
+    "api.groq.com": 2.1,
 }
 
 
