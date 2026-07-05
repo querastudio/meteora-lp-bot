@@ -21,7 +21,7 @@ import notify
 import scoring
 import state as state_mod
 from screening import hard_filters, holders, lp_quality, volatility
-from sources import dexscreener, helius, meteora, narrative
+from sources import dexscreener, geckoterminal, helius, meteora, narrative
 
 logging.basicConfig(
     level=logging.INFO,
@@ -136,8 +136,17 @@ def _process_candidate(pool: Dict[str, Any], st: Dict[str, Any], sol_price: floa
     # ---- STAGE 7: narasi viral (degrade gracefully) ----
     nar = narrative.evaluate_narrative(metrics.get("name", ""), symbol)
 
+    # ---- MOMENTUM VWAP (opsional, soft score -- degrade gracefully) ----
+    # Pakai pool address yg SAMA dgn sumber harga "sekarang" (best-pair
+    # Dexscreener), bukan selalu pool Meteora -- token bisa trading di >1
+    # DEX dgn riwayat harga beda (pelajaran dari bug ATH $manlet dulu).
+    vwap = {}
+    if config.VWAP_MOMENTUM_ENABLED:
+        vwap_pool_address = metrics.get("pair_address") or pool["address"]
+        vwap = geckoterminal.vwap_signal(vwap_pool_address, metrics["price_usd"])
+
     # ---- SCORING & VERDICT ----
-    scored = scoring.compute(lp, vol, hold, nar, warnings)
+    scored = scoring.compute(lp, vol, hold, nar, warnings, vwap)
     verdict = scored["verdict"]
     log.info("$%s -> %s (skor %.0f) breakdown=%s", symbol, verdict, scored["score"], scored["breakdown"])
 
@@ -161,6 +170,7 @@ def _process_candidate(pool: Dict[str, Any], st: Dict[str, Any], sol_price: floa
         "holders": hold,
         "lp": lp,
         "vol": vol,
+        "vwap": vwap,
         "narrative": nar,
         "warnings": warnings,
         "links": links,

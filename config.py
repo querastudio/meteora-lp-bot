@@ -128,6 +128,12 @@ VERTICAL_DEATH_DRAWDOWN_PCT = _env_float("VERTICAL_DEATH_DRAWDOWN_PCT", 60.0)
 # Minimal jumlah "hari volume tahan" (proxy dari h6/h24 Dexscreener) untuk skor tinggi.
 # Kita approx pakai konsistensi volume antar-window (lihat volatility.py).
 
+# --- Momentum VWAP (opsional, gratis via GeckoTerminal OHLCV) ---
+# Harga sekarang vs VWAP sejak pool dibuat -- ala indikator "VWAP hlc3
+# Century" yang user pantau manual di GMGN. SOFT SCORE saja (bukan hard
+# gate) -- lihat sources/geckoterminal.py utk alasan & kurva skornya.
+VWAP_MOMENTUM_ENABLED = _env_bool("VWAP_MOMENTUM_ENABLED", True)
+
 
 # ---------------------------------------------------------------------------
 # STAGE 7 — VALIDASI NARASI VIRAL (kualitatif + kuantitatif, lintas platform)
@@ -177,8 +183,12 @@ WEIGHTS = {
     "holder_health": _env_float("W_HOLDER", 15.0),
     # Stage 7 — narasi tahan lama (volume tahan lama sering ditopang narasi hidup)
     "narrative": _env_float("W_NARRATIVE", 10.0),
+    # Momentum VWAP (opsional) — sinyal timing/hype, bukan keamanan/fee inti,
+    # jadi bobotnya kecil & degrade ke netral (0.5) kalau data tak tersedia.
+    "vwap_momentum": _env_float("W_VWAP_MOMENTUM", 8.0),
 }
-# Total maksimum bobot = 100 (kalau default). Skor akhir dinormalisasi ke 0-100.
+# Total bobot dinormalisasi otomatis di scoring.py (skor akhir tetap 0-100
+# walau total di atas tak persis 100).
 
 # Ambang verdict berdasarkan soft score (0-100) SETELAH semua hard gate lolos.
 VERDICT_STRONG_MIN = _env_float("VERDICT_STRONG_MIN", 65.0)

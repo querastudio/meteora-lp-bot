@@ -77,6 +77,7 @@ def format_message(ctx: Dict[str, Any]) -> str:
     h = ctx["holders"]
     lp = ctx["lp"]
     vol = ctx["vol"]
+    vwap = ctx.get("vwap", {})
     nar = ctx["narrative"]
     links = ctx["links"]
     warns: List[str] = ctx.get("warnings", [])
@@ -131,6 +132,16 @@ def format_message(ctx: Dict[str, Any]) -> str:
         f"Vol/TVL: {lp['vol_tvl']}× {vol_flag}"
     )
     lines.append(f"─ Volatilitas: {vol['note']} {'✅' if not vol['vertical_death'] else '🔴'}")
+    if vwap.get("available"):
+        pct = vwap.get("ratio_pct", 0.0)
+        pos = "di atas" if vwap.get("above_vwap") else "di bawah"
+        flag = "✅" if vwap.get("above_vwap") else "⚠️"
+        extreme = " (ekstrem, waspada blow-off-top)" if pct > 200 else ""
+        lines.append(
+            f"─ VWAP (1j, sejak pool dibuat): harga {pos} VWAP {abs(pct):.0f}% {flag}{extreme}"
+        )
+    else:
+        lines.append("─ VWAP: n/a")
     lines.append(f"─ Konsentrasi LP: {'sehat ✅' if lp['lp_conc_score']>=0.7 else 'sedang ⚠️'} (est)")
     if lp.get("pool_age_hours") is not None:
         lines.append(f"─ Umur pool: {lp['pool_age_hours']:.0f} jam")
