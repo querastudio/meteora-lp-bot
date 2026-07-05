@@ -2,7 +2,8 @@
 "tokens": {
 "3oBRGPMpvR1TpHRx9oMEeJwSgwv7Fo7ndshuu2rQpump": {
 "price_history": [
-0.0003666
+0.0003666,
+0.000357
 ],
 "symbol": "Potato"
 },
@@ -28,7 +29,8 @@
 },
 "5pYB12kEhfhSFXJjZ7JtyqDpt6uUqhsF6iu6Ee9spump": {
 "price_history": [
-0.001501
+0.001501,
+0.001514
 ],
 "symbol": "CATWIF"
 },
@@ -97,12 +99,14 @@
 0.2946,
 0.2959,
 0.2989,
-0.2981
+0.2981,
+0.3009
 ],
 "symbol": "ANSEM"
 },
 "B6f27ETGcjgGNB1fqULJbXVmw9FnL8HgBp7R83hmpump": {
 "price_history": [
+0.001931,
 0.001931
 ],
 "symbol": "drooling"
@@ -111,7 +115,8 @@
 "last_notified_ts": 1783235204.2619,
 "last_verdict": "WATCH",
 "price_history": [
-0.007956
+0.007956,
+0.008034
 ],
 "symbol": "Jotchua"
 },
@@ -155,13 +160,15 @@
 0.001353,
 0.001341,
 0.001328,
-0.001319
+0.001319,
+0.001264
 ],
 "symbol": "Hobbes"
 },
 "C6kWVdLGAE3Eb8Xc6VRZbs9ZvouHhBMYbhd4BVagD4Da": {
 "price_history": [
-0.00104
+0.00104,
+0.001022
 ],
 "symbol": "TESTIBULL"
 },
@@ -230,7 +237,8 @@
 0.001867,
 0.001874,
 0.001997,
-0.001978
+0.001978,
+0.002077
 ],
 "symbol": "MENSA"
 },
@@ -285,7 +293,8 @@
 0.00128,
 0.001344,
 0.001276,
-0.001277
+0.001277,
+0.001251
 ],
 "symbol": "BABYANSEM"
 },
@@ -354,13 +363,15 @@
 0.01242,
 0.0118,
 0.01157,
-0.01144
+0.01144,
+0.01181
 ],
 "symbol": "manlet"
 },
 "ERPtViqckt1zqpS2abUx67CgLcP54CkhBPYz3yRUpump": {
 "price_history": [
-0.000227
+0.000227,
+0.0002286
 ],
 "symbol": "yep"
 },
@@ -368,7 +379,8 @@
 "last_notified_ts": 1783235216.4164357,
 "last_verdict": "WATCH",
 "price_history": [
-0.00493
+0.00493,
+0.004916
 ],
 "symbol": "ZERO"
 },
@@ -376,7 +388,8 @@
 "last_notified_ts": 1783235229.411064,
 "last_verdict": "WATCH",
 "price_history": [
-0.003117
+0.003117,
+0.003056
 ],
 "symbol": "world"
 },
@@ -403,16 +416,18 @@
 "last_notified_ts": 1783235241.7734354,
 "last_verdict": "WATCH",
 "price_history": [
-0.004237
+0.004237,
+0.004052
 ],
 "symbol": "CHANCE"
 },
 "cvkarf1CtN3tbLRk961vsaEf4T8QbnihDkCHa93pump": {
 "price_history": [
-0.0005242
+0.0005242,
+0.0005333
 ],
 "symbol": "NEIL"
 }
 },
-"updated_at": 1783235242.8082454
+"updated_at": 1783235555.8367808
 }
