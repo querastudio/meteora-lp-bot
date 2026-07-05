@@ -21,7 +21,7 @@ Token digugurkan sedini mungkin untuk hemat rate limit API gratis.
 | Stage | Nama | Sumber | Tipe |
 |------|------|--------|------|
 | 1 | Hard filter pool (TVL, base fee, bin step, fee global 20 SOL, quote SOL/USDC) | Meteora | Hard gate |
-| 2 | Hard filter token (mcap, vol24h, **ATH proximity**) | Dexscreener+GeckoTerminal | Hard gate |
+| 2 | Hard filter token (mcap, vol24h) | Dexscreener | Hard gate |
 | 3 | **Keamanan kontrak** (no-mint, no-freeze, no-tax) | Helius | Hard gate |
 | 4 | Distribusi holder (top10 <30%; **cluster/bundle <25%**; **coordinated trading TINGGI** = gate) | Helius | Gate |
 | 5 | Kualitas LP (**fee/TVL harian**, vol/TVL, umur, konsentrasi) | Meteora+Dex | Soft |
@@ -38,7 +38,7 @@ Token digugurkan sedini mungkin untuk hemat rate limit API gratis.
 ```
 main.py                 # orkestrasi pipeline Stage 1→7
 config.py               # SEMUA threshold & bobot (tuning di sini)
-state.py                # anti-duplikat + riwayat harga/ATH (JSON commit-back)
+state.py                # anti-duplikat + riwayat harga utk Stage 6 (JSON commit-back)
 scoring.py              # engine soft-score + verdict
 notify.py               # format Telegram + generator link manual
 sources/
@@ -187,17 +187,18 @@ Keamanan kontrak **tidak** diberi bobot soft — ia **hard gate biner** (satu ga
 
 ## 💾 State antar-run: kenapa commit-back?
 
-Bot butuh mengingat **riwayat harga/ATH** (untuk gate ATH Stage 2) dan **pool yang
-sudah dinotif** (anti-duplikat). GitHub Actions bersifat stateless, jadi ada 2 opsi:
+Bot butuh mengingat **riwayat harga** (untuk estimasi volume-tahan-lama Stage 6)
+dan **pool yang sudah dinotif** (anti-duplikat). GitHub Actions bersifat stateless,
+jadi ada 2 opsi:
 
 | Opsi | Kelebihan | Kekurangan |
 |------|-----------|-----------|
 | **Commit file `state_data.json` balik ke repo** ✅ dipakai | Persisten, deterministik, ada audit trail di git history | Ada 1 commit "bot" tiap state berubah |
-| Actions cache/artifact | Tak mengotori history | **Bisa evicted** (7 hari / kapasitas) → riwayat ATH hilang → gate ATH salah |
+| Actions cache/artifact | Tak mengotori history | **Bisa evicted** (7 hari / kapasitas) → riwayat harga hilang |
 
-Karena benang merah bot ini adalah **ATH & anti-duplikat yang tak boleh hilang**,
-commit-back dipilih. Commit state memakai `[skip ci]` agar tidak memicu workflow lagi,
-dan workflow memakai `concurrency` guard supaya run tak tumpang tindih / merusak state.
+Karena riwayat harga & anti-duplikat tak boleh hilang, commit-back dipilih. Commit
+state memakai `[skip ci]` agar tidak memicu workflow lagi, dan workflow memakai
+`concurrency` guard supaya run tak tumpang tindih / merusak state.
 
 ---
 
@@ -206,17 +207,6 @@ dan workflow memakai `concurrency` guard supaya run tak tumpang tindih / merusak
 Bot ini **tidak scraping** hal-hal berikut — sebagai gantinya menyediakan **link
 siap-klik** di tiap notifikasi untuk verifikasi manual:
 
-- **ATH sungguhan** → Dexscreener (API gratis) **tidak** menyediakan riwayat harga
-  historis, cuma harga saat ini + persen perubahan h1/h6/h24. Sebagai gantinya bot
-  memakai **GeckoTerminal** (produk CoinGecko, gratis, no API key, `sources/geckoterminal.py`)
-  yang menyediakan candle OHLCV harian hingga **~6 bulan ke belakang** — kita ambil
-  `high` tertinggi dari candle tsb sbg ATH sungguhan, digabung dengan riwayat state
-  bot sendiri (`state.py`) sbg pelengkap/fallback kalau pool belum terindeks
-  GeckoTerminal atau API-nya bermasalah (`GECKOTERMINAL_ATH_ENABLED=false` utk
-  matikan). Kalau kedua sumber kosong (pool sangat baru, cold-start), bot TIDAK
-  asal klaim "mencetak ATH baru" — dicek dulu tren `price_change_h24/h6`; kalau
-  sedang turun konsisten, gate digagalkan. Notifikasi selalu menandai sumber ATH
-  yang dipakai ("GeckoTerminal" vs "proxy sejak bot mengamati") agar transparan.
 - **LP-lock / likuiditas dev terkunci** → tak bisa dipastikan 100% gratis → ditandai
   ⚠️ dan verdict STRONG diturunkan ke WATCH (lihat `DOWNGRADE_ON_WARN`). Cek manual
   via RugCheck/GMGN.

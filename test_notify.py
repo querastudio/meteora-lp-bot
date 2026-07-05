@@ -1,10 +1,10 @@
 """
 test_notify.py — Kirim CONTOH notifikasi Telegram dgn data sintetis (bukan real).
 
-Tujuan: user bisa lihat tampilan format notifikasi terbaru (semua fitur: ATH
-dgn sumber GeckoTerminal, cluster/bundle detection, narasi Viralitas+Daya
-Tahan+Reddit+evidence, link X, dst.) tanpa perlu menunggu token asli lolos
-semua gate. TIDAK menyentuh state_data.json, TIDAK menjalankan pipeline nyata.
+Tujuan: user bisa lihat tampilan format notifikasi terbaru (cluster/bundle
+detection, coordinated trading, narasi Viralitas+Daya Tahan+Reddit+evidence,
+link X, dst.) tanpa perlu menunggu token asli lolos semua gate. TIDAK
+menyentuh state_data.json, TIDAK menjalankan pipeline nyata.
 """
 
 import logging
@@ -42,10 +42,6 @@ def build_sample_ctx() -> dict:
         "pool_age_hours": 96, "fee_estimated": False,
     }
     vol = {"note": "turun bertahap, volume tahan 4 hari", "vertical_death": False}
-    ath_info = {
-        "making_new_ath": True, "cold_start": False,
-        "source": "GeckoTerminal (riwayat lengkap)",
-    }
     narrative = {
         "category": "animal", "keyword": symbol, "score": 0.88,
         "viral_label": "🔥 SANGAT VIRAL", "durability_label": "TAHAN LAMA",
@@ -91,7 +87,6 @@ def build_sample_ctx() -> dict:
         "lp": lp,
         "vol": vol,
         "narrative": narrative,
-        "ath_info": ath_info,
         "warnings": warnings,
         "links": links,
     }

@@ -2,9 +2,9 @@
 main.py — Orkestrasi pipeline cascade (Stage 1 -> 7).
 
 Alur per run (dipanggil cron GitHub Actions tiap 5 menit):
-  1. Load state (ATH history + anti-duplikat) & harga SOL.
+  1. Load state (anti-duplikat + riwayat harga utk Stage 6) & harga SOL.
   2. Fetch pool Meteora, urut aktivitas.
-  3. Cascade: Stage 1 (pool) -> Stage 2 (token+ATH) -> Stage 3 (keamanan)
+  3. Cascade: Stage 1 (pool) -> Stage 2 (mcap/volume) -> Stage 3 (keamanan)
      -> Stage 4 (holder) -> Stage 5 (LP) -> Stage 6 (volatilitas) -> Stage 7 (narasi).
      Gugur di stage awal = tak lanjut ke stage mahal (hemat rate limit).
   4. Scoring -> verdict. Kirim Telegram (anti-duplikat). Simpan state.
@@ -14,14 +14,14 @@ Prinsip: cepat, idempoten, degrade gracefully. Satu API mati != run crash.
 
 import logging
 import sys
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import config
 import notify
 import scoring
 import state as state_mod
 from screening import hard_filters, holders, lp_quality, volatility
-from sources import dexscreener, geckoterminal, helius, meteora, narrative
+from sources import dexscreener, helius, meteora, narrative
 
 logging.basicConfig(
     level=logging.INFO,
@@ -29,28 +29,6 @@ logging.basicConfig(
     datefmt="%H:%M:%S",
 )
 log = logging.getLogger("main")
-
-
-def _sanity_check_ath(gt_ath: Optional[float], price_now: float, symbol: str) -> Optional[float]:
-    """
-    Validasi ATH GeckoTerminal sebelum dipercaya. Kalau rasio thd harga sekarang
-    tak masuk akal (mis. base/quote candle tertukar, atau pool salah terindeks),
-    ABAIKAN -> return None (fallback ke riwayat state sendiri).
-
-    Memecoin wajar bisa turun drastis dari puncak (>99%), jadi cap-nya dibuat
-    longgar (rasio hingga 50.000x) -- yang dicurigai cuma kasus EKSTREM yang
-    biasanya berarti data salah, bukan drawdown asli sekeras apa pun.
-    """
-    if gt_ath is None or gt_ath <= 0 or price_now <= 0:
-        return None
-    ratio = gt_ath / price_now
-    if ratio > 50_000:
-        log.info(
-            "GeckoTerminal ATH $%s tampak tak wajar (%.0fx harga sekarang) utk $%s -> diabaikan",
-            f"{gt_ath:.8f}", ratio, symbol,
-        )
-        return None
-    return gt_ath
 
 
 def run() -> int:
@@ -86,7 +64,7 @@ def run() -> int:
         except Exception as e:  # noqa: BLE001 — 1 token error != crash run
             log.exception("Error proses pool %s: %s", pool.get("name"), e)
 
-    # Simpan state (ATH history + notified) untuk run berikutnya.
+    # Simpan state (riwayat harga + notified) untuk run berikutnya.
     state_mod.save(st)
     log.info("=== Selesai. %d notifikasi terkirim. ===", sent)
     return sent
@@ -97,40 +75,17 @@ def _process_candidate(pool: Dict[str, Any], st: Dict[str, Any], sol_price: floa
     mint = hard_filters.base_mint_of(pool)
     name = pool.get("name", "?")
 
-    # ---- STAGE 2: token metrics + ATH ----
+    # ---- STAGE 2: token metrics (mcap/volume) ----
     metrics = dexscreener.get_token_metrics(mint)
     if not metrics:
         log.info("S2 skip %s: metrik token tak tersedia", name)
         return False
 
     symbol = metrics["symbol"]
-    # ATH sungguhan (candle OHLCV GeckoTerminal, ~6 bulan riwayat) -- degrade
-    # gracefully ke None kalau pool belum terindeks / API gagal.
-    #
-    # PENTING: pakai pool address yg SAMA dgn sumber harga "sekarang" (best pair
-    # Dexscreener), BUKAN selalu pool Meteora kita -- token bisa trading di
-    # beberapa DEX (mis. Meteora + Raydium) dgn riwayat harga yg beda. Kalau
-    # dicampur (ATH dari pool A, harga sekarang dari pool B), perbandingan jadi
-    # tak konsisten/salah -- ini kemungkinan akar masalah kasus $manlet.
-    ath_pool_address = metrics.get("pair_address") or pool["address"]
-    gt_ath_raw = geckoterminal.get_pool_ath(ath_pool_address)
-    gt_ath = _sanity_check_ath(gt_ath_raw, metrics["price_usd"], symbol)
+    # Catat harga ke riwayat (dipakai Stage 6 utk estimasi volume-tahan-lama).
+    state_mod.record_price(st, mint, metrics["price_usd"], symbol)
 
-    state_ath_before = state_mod.get_token(st, mint).get("ath", 0.0)
-    log.info(
-        "ATH-debug $%s: harga_now=%.10g gt_ath_raw=%s gt_ath_terpakai=%s state_ath_lama=%.10g "
-        "(pool_ath_lookup=%s vs pool_meteora=%s)",
-        symbol, metrics["price_usd"], gt_ath_raw, gt_ath, state_ath_before,
-        ath_pool_address, pool["address"],
-    )
-
-    # Catat harga & ambil ATH-baseline SEBELUM update. GeckoTerminal (kalau valid)
-    # DIPERCAYA sbg sumber otoritatif -- lihat state.record_price kenapa ini
-    # penting (state sendiri bisa "keracunan" bacaan harga keliru di masa lalu).
-    prev_ath = state_mod.record_price(st, mint, metrics["price_usd"], symbol, external_ath_hint=gt_ath)
-
-    ok2, reasons2, ath_info = hard_filters.stage2_token(metrics, prev_ath)
-    ath_info["source"] = "GeckoTerminal (riwayat lengkap)" if gt_ath else "proxy sejak bot mengamati"
+    ok2, reasons2 = hard_filters.stage2_token(metrics)
     if not ok2:
         log.info("S2 gugur $%s: %s", symbol, reasons2)
         return False
@@ -145,8 +100,6 @@ def _process_candidate(pool: Dict[str, Any], st: Dict[str, Any], sol_price: floa
         return False
 
     warnings: List[str] = list(warn3)
-    if ath_info.get("cold_start"):
-        warnings.append("ATH: data baru dikumpulkan, belum ada riwayat penuh")
 
     # ---- STAGE 4: distribusi holder (hard gate top10 + cluster + soft heuristik) ----
     hold = holders.analyze(mint, sol_price)
@@ -209,7 +162,6 @@ def _process_candidate(pool: Dict[str, Any], st: Dict[str, Any], sol_price: floa
         "lp": lp,
         "vol": vol,
         "narrative": nar,
-        "ath_info": ath_info,
         "warnings": warnings,
         "links": links,
     }

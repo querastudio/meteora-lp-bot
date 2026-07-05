@@ -1,11 +1,11 @@
 """
-state.py — Persistensi antar-run (anti-duplikat + riwayat harga/ATH).
+state.py — Persistensi antar-run (anti-duplikat + riwayat harga utk Stage 6).
 
 Keputusan desain: simpan state sebagai file JSON yang DI-COMMIT balik ke repo
 (bukan Actions cache/artifact). Alasan:
   - Deterministik & persisten: cache bisa evicted (7 hari / kapasitas) -> riwayat
-    ATH hilang -> ATH-gate salah. Commit-back tak pernah hilang.
-  - Audit trail: perubahan verdict/ATH terekam di git history.
+    harga hilang -> estimasi volatilitas Stage 6 salah. Commit-back tak pernah hilang.
+  - Audit trail: perubahan verdict terekam di git history.
   - File kecil (hanya token yang pernah lolos) -> commit ringan.
 Trade-off: ada 1 commit "bot" tiap state berubah. Diredam dengan [skip ci] di
 pesan commit + concurrency guard di workflow supaya run tak tumpang tindih.
@@ -14,7 +14,6 @@ Struktur file:
 {
   "tokens": {
      "<mint>": {
-        "ath": float,                 # harga tertinggi tercatat (proxy ATH)
         "price_history": [float,...], # beberapa titik terakhir (capped)
         "last_verdict": "STRONG"|"WATCH",
         "last_notified_ts": float,    # epoch detik
@@ -29,7 +28,7 @@ import json
 import logging
 import os
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import config
 
@@ -67,39 +66,9 @@ def save(state: Dict[str, Any]) -> None:
         log.error("Gagal simpan state: %s", e)
 
 
-def get_token(state: Dict[str, Any], mint: str) -> Dict[str, Any]:
-    return state["tokens"].get(mint, {})
-
-
-def record_price(
-    state: Dict[str, Any],
-    mint: str,
-    price: float,
-    symbol: str = "",
-    external_ath_hint: Optional[float] = None,
-) -> float:
-    """
-    Catat harga terbaru; update ATH. Return ATH-baseline SEBELUM update harga
-    sekarang (dipakai Stage 2 utk cek proximity/making-new-ATH).
-
-    external_ath_hint: ATH sungguhan dari sumber luar (GeckoTerminal OHLCV,
-    lihat sources/geckoterminal.py). PENTING: kalau tersedia, ini DIPERCAYA
-    SEBAGAI SUMBER OTORITATIF (menimpa, bukan cuma "diambil yang lebih tinggi"
-    dari riwayat state) -- karena riwayat state sendiri bersifat akumulatif
-    permanen, satu bacaan harga yang keliru/glitch di masa lalu (mis. salah
-    pilih pair) bisa "terpatri" selamanya dan terus memblokir token yang
-    sebenarnya sudah benar. GeckoTerminal (sumber luar independen) dipakai utk
-    "menyembuhkan" state yang mungkin sudah tercemar. Kalau hint tak tersedia
-    (None), baru fallback ke riwayat state sendiri sbg baseline.
-    """
-    tok = state["tokens"].setdefault(
-        mint, {"ath": 0.0, "price_history": [], "symbol": symbol}
-    )
-    if external_ath_hint is not None and external_ath_hint > 0:
-        prev_ath = float(external_ath_hint)
-    else:
-        prev_ath = float(tok.get("ath", 0.0))
-    tok["ath"] = prev_ath
+def record_price(state: Dict[str, Any], mint: str, price: float, symbol: str = "") -> None:
+    """Catat harga terbaru ke riwayat (dipakai Stage 6 utk estimasi volume-tahan-lama)."""
+    tok = state["tokens"].setdefault(mint, {"price_history": [], "symbol": symbol})
 
     hist: List[float] = tok.get("price_history", [])
     if price > 0:
@@ -107,11 +76,8 @@ def record_price(
         if len(hist) > _MAX_HISTORY:
             hist = hist[-_MAX_HISTORY:]
         tok["price_history"] = hist
-        if price > prev_ath:
-            tok["ath"] = price
     if symbol:
         tok["symbol"] = symbol
-    return prev_ath
 
 
 def get_price_history(state: Dict[str, Any], mint: str) -> List[float]:

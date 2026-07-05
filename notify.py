@@ -91,15 +91,6 @@ def format_message(ctx: Dict[str, Any]) -> str:
     lines.append(
         f"─ MCap ${_h(m['market_cap'])} {_yn(True)} | Vol24h ${_h(m['volume_h24'])} {_yn(True)}"
     )
-    ath_info = ctx["ath_info"]
-    if ath_info.get("cold_start"):
-        ath_txt = "data awal (tren harga stabil/naik) ⚠️"
-    elif ath_info.get("making_new_ath"):
-        ath_txt = "mencetak baru ✅"
-    else:
-        ath_txt = "dekat ATH ✅"
-    ath_src = ath_info.get("source", "")
-    lines.append(f"─ ATH: {ath_txt} <i>({ath_src})</i>" if ath_src else f"─ ATH: {ath_txt}")
     lines.append(
         f"─ TVL ${_h(p['tvl_usd'])} | Bin {p['bin_step']} | Base {p['base_fee_pct']}% | "
         f"Quote {p.get('_quote_symbol','?')} ✅"
