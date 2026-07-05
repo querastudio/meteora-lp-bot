@@ -21,7 +21,7 @@ import notify
 import scoring
 import state as state_mod
 from screening import hard_filters, holders, lp_quality, volatility
-from sources import dexscreener, geckoterminal, gemini, groq, helius, lunarcrush, meteora, narrative
+from sources import dexscreener, geckoterminal, gemini, groq, helius, jupiter, lunarcrush, meteora, narrative
 
 logging.basicConfig(
     level=logging.INFO,
@@ -179,8 +179,11 @@ def _process_candidate(pool: Dict[str, Any], st: Dict[str, Any], sol_price: floa
     # itu wajar -- degrade gracefully, lihat sources/lunarcrush.py.
     lc = lunarcrush.social_signal(symbol)
 
+    # ---- JUPITER ORGANIC SCORE (gratis) -- penguat deteksi wash-trading ----
+    jup = jupiter.organic_score(mint)
+
     # ---- SCORING & VERDICT ----
-    scored = scoring.compute(lp, vol, hold, nar, warnings, vwap, lc)
+    scored = scoring.compute(lp, vol, hold, nar, warnings, vwap, lc, jup)
     verdict = scored["verdict"]
     log.info("$%s -> %s (skor %.0f) breakdown=%s", symbol, verdict, scored["score"], scored["breakdown"])
 
@@ -206,6 +209,7 @@ def _process_candidate(pool: Dict[str, Any], st: Dict[str, Any], sol_price: floa
         "vol": vol,
         "vwap": vwap,
         "lunarcrush": lc,
+        "jupiter": jup,
         "narrative": nar,
         "warnings": warnings,
         "links": links,

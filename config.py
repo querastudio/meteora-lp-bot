@@ -197,6 +197,11 @@ AI_MIN_NEWS_ARTICLES = _env_int("AI_MIN_NEWS_ARTICLES", 3)
 # kandidat fresh, degrade gracefully. Lihat sources/lunarcrush.py.
 LUNARCRUSH_ENABLED = _env_bool("LUNARCRUSH_ENABLED", True)
 
+# --- Jupiter Organic Score (gratis, no key) -- legitimasi volume asli ---
+# BUKAN sinyal narasi -- ini deteksi wash-trading/bot-volume, penguat utk
+# Stage 4/6. Lihat sources/jupiter.py.
+JUPITER_ORGANIC_ENABLED = _env_bool("JUPITER_ORGANIC_ENABLED", True)
+
 
 # ---------------------------------------------------------------------------
 # SCORING ENGINE — BOBOT SOFT SCORE (total mencerminkan profil pasif-konservatif)
@@ -222,6 +227,9 @@ WEIGHTS = {
     # Nyaris selalu netral (0.5) utk token super baru (belum ter-index),
     # jadi bobotnya kecil spy tak mendominasi skor saat n/a.
     "lunarcrush_social": _env_float("W_LUNARCRUSH", 8.0),
+    # Jupiter Organic Score (gratis) — penguat deteksi wash-trading, di
+    # samping heuristik holder/volatilitas yg sudah ada.
+    "jupiter_organic": _env_float("W_JUPITER_ORGANIC", 10.0),
 }
 # Total bobot dinormalisasi otomatis di scoring.py (skor akhir tetap 0-100
 # walau total di atas tak persis 100).

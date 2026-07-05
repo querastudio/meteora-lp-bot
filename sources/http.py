@@ -58,6 +58,9 @@ _MIN_INTERVAL = {
     # LunarCrush (berbayar, tier Individual) -- jeda konservatif, blm ada
     # angka rate-limit resmi yg kita pakai jadi aman lebih lambat.
     "lunarcrush.com": 1.0,
+    # Jupiter lite-api (gratis, no key) -- jeda konservatif, blm ada angka
+    # rate-limit resmi yg kita pakai jadi aman lebih lambat.
+    "lite-api.jup.ag": 0.5,
 }
 
 

@@ -29,6 +29,7 @@ Token digugurkan sedini mungkin untuk hemat rate limit API gratis.
 | 7 | Narasi: **Viralitas** + **Daya Tahan** (kualitatif+kuantitatif) + AI check organik/terkoordinasi (opsional) | Trends/YouTube/Reddit/News/Gemini+Groq | Soft |
 | — | Momentum **VWAP** (harga vs rata-rata tertimbang volume sejak pool dibuat) | GeckoTerminal OHLCV | Soft |
 | — | Sinyal sosial X (**Galaxy Score**/sentiment, opsional **BERBAYAR**) | LunarCrush | Soft |
+| — | **Jupiter Organic Score** (volume asli vs bot/wash-trading, gratis no key) | Jupiter Tokens API v2 | Soft |
 
 **Soal AI check narasi (Gemini + fallback Groq, opsional):** hanya menilai apakah
 kutipan Reddit/News yang sudah lolos filter relevansi terlihat organik atau pola
@@ -55,6 +56,14 @@ di log = perlu upgrade ~$24/bln tier Individual; kalau berhasil, gratis).
 meng-index token yang baru rilis hitungan jam — jadi utk kandidat paling
 fresh, sinyal ini nyaris selalu n/a (wajar, bukan bug). Kosongkan
 `LUNARCRUSH_API_KEY` utk skip total (tak ada dampak ke pipeline).
+
+**Soal Jupiter Organic Score (gratis, no key):** BUKAN sinyal narasi — ini
+sinyal legitimasi volume (organic volume/holders/traders/buyers vs bot/
+wash-trading) dari Jupiter, agregator DEX terbesar Solana yang melihat
+semua venue trading. Penguat utk deteksi coordinated-trading/wash-trading
+di samping heuristik holder/volatilitas yang sudah ada — soft score, bukan
+hard gate. API masih "V2 (Beta)" per dokumentasi Jupiter, jadi skema bisa
+berubah; degrade gracefully kalau parsing gagal.
 
 **Hard gate gagal → SKIP (dibuang).** Yang lolos semua hard gate diberi **soft score
 0–100** (bobot bisa dituning di `config.py`) → verdict STRONG/WATCH.
