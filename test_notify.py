@@ -42,6 +42,10 @@ def build_sample_ctx() -> dict:
         "pool_age_hours": 96, "fee_estimated": False,
     }
     vol = {"note": "turun bertahap, volume tahan 4 hari", "vertical_death": False}
+    vwap = {
+        "available": True, "vwap": 0.00623, "ratio_pct": 30.3,
+        "above_vwap": True, "momentum_score": 0.88, "candle_count": 96,
+    }
     narrative = {
         "category": "animal", "keyword": symbol, "score": 0.88,
         "viral_label": "🔥 SANGAT VIRAL", "durability_label": "TAHAN LAMA",
@@ -86,6 +90,7 @@ def build_sample_ctx() -> dict:
         "holders": hold,
         "lp": lp,
         "vol": vol,
+        "vwap": vwap,
         "narrative": narrative,
         "warnings": warnings,
         "links": links,

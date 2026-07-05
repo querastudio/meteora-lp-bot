@@ -86,6 +86,11 @@ def get_token_metrics(mint: str) -> Optional[Dict[str, Any]]:
         "price_change_h1": _to_float(chg.get("h1")),
         "liquidity_usd": _to_float(liq.get("usd")),
         "pair_created_at": best.get("pairCreatedAt"),  # ms epoch atau None
+        # Pool/dex dari best-pair ini -- dipakai sumber lain (mis. VWAP
+        # GeckoTerminal) supaya konsisten dgn pool sumber harga "sekarang"
+        # (token bisa trading di >1 DEX/pool berbeda riwayat harga).
+        "pair_address": best.get("pairAddress") or "",
+        "dex_id": best.get("dexId") or "",
         "url": best.get("url") or "",
         "_raw": best,
     }

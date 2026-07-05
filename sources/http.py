@@ -48,6 +48,8 @@ _MIN_INTERVAL = {
     # Reddit: tak ada limit resmi dipublikasikan utk endpoint json publik ini;
     # jeda konservatif spy tak dianggap abuse.
     "www.reddit.com": 1.0,
+    # GeckoTerminal free tier ~30 req/menit -> jeda >2s aman.
+    "api.geckoterminal.com": 2.1,
 }
 
 

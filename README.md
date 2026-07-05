@@ -27,6 +27,7 @@ Token digugurkan sedini mungkin untuk hemat rate limit API gratis.
 | 5 | Kualitas LP (**fee/TVL harian**, vol/TVL, umur, konsentrasi) | Meteora+Dex | Soft |
 | 6 | Volatilitas "turun-stabil" vs "mati vertikal" | Dexscreener+state | Soft + SKIP |
 | 7 | Narasi: **Viralitas** + **Daya Tahan** (kualitatif+kuantitatif) | Trends/YouTube/Reddit/News | Soft |
+| — | Momentum **VWAP** (harga vs rata-rata tertimbang volume sejak pool dibuat) | GeckoTerminal OHLCV | Soft |
 
 **Hard gate gagal → SKIP (dibuang).** Yang lolos semua hard gate diberi **soft score
 0–100** (bobot bisa dituning di `config.py`) → verdict STRONG/WATCH.
