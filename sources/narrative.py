@@ -460,8 +460,28 @@ def evaluate_narrative(name: str, symbol: str) -> Dict[str, Any]:
         + 0.25 * durability_score
     )
 
+    # --- Buta-kanal: Reddit/YouTube/News nihil BUKAN bukti "tak ada narasi".
+    # X/Twitter -- kanal UTAMA hype memecoin Solana (lihat docstring modul
+    # ini) -- tak bisa dicek otomatis sama sekali (no API gratis/aman, sudah
+    # diriset tuntas). Kalau ketiga kanal yg KITA pantau nihil, itu cuma
+    # berarti kita buta di sini, bukan token-nya sepi -- jangan hukum skor
+    # jatuh ke LEMAH krn itu, netralkan spt komponen soft-score lain
+    # (VWAP/LunarCrush/Jupiter) yg default netral saat data tak tersedia.
+    # (Trends dikecualikan dari cek ini -- kata umum spt "world"/"chance"
+    # selalu ada baseline volume tak berkaitan, jadi bukan sinyal andal soal
+    # buta/tidaknya kanal lain.)
+    channels_blind = (
+        reddit.get("post_count", 0) == 0
+        and youtube.get("video_count", 0) == 0
+        and news.get("article_count", 0) == 0
+    )
+    if channels_blind:
+        score = max(score, 0.5)
+
     # --- Label ---
-    if breadth_score >= 0.75 and volume_score >= 0.6:
+    if channels_blind:
+        viral_label = "❔ TAK TERUKUR (Reddit/YouTube/News nihil -- cek manual X)"
+    elif breadth_score >= 0.75 and volume_score >= 0.6:
         viral_label = "🔥 SANGAT VIRAL"
     elif breadth_score >= 0.5:
         viral_label = "VIRAL"
@@ -479,6 +499,11 @@ def evaluate_narrative(name: str, symbol: str) -> Dict[str, Any]:
 
     # --- Insight kualitatif otomatis (rule-based, bukan LLM -> deterministik) ---
     insights: List[str] = []
+    if channels_blind:
+        insights.append(
+            "Reddit/YouTube/News nihil -- BUKAN bukti token ini sepi narasi, "
+            "cuma kanal ini yg buta; X sering jadi kanal utama hype memecoin -- WAJIB cek manual"
+        )
     n_active = sum(1 for f in active_flags if f)
     if n_active >= 3:
         insights.append(f"aktif di {n_active}/4 platform (bukan 1 sumber saja)")
