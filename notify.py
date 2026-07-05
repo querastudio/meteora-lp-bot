@@ -107,12 +107,6 @@ def format_message(ctx: Dict[str, Any]) -> str:
         lines.append(f"─ Top10: {h['top10_pct']}% {_yn(h['top10_gate_pass'])}")
         coord = h.get("coordination_label", "n/a")
         coord_emoji = {"TINGGI": "🔴", "SEDANG": "🟡", "WAJAR": "✅"}.get(coord, "")
-        n_ins = h.get("inspected_count", 0)
-        lines.append(
-            f"─ Top{n_ins} wallet: {h.get('fresh_pct',0)}% fresh, "
-            f"{h.get('empty_pct',0)}% saldo&lt;${config.EMPTY_WALLET_SOL_USD:.0f}, "
-            f"{h.get('young_pct',0)}% umur&lt;{config.WALLET_YOUNG_AGE_HOURS:.0f}j"
-        )
         lines.append(f"─ Indikasi coordinated trading: {coord_emoji} {coord}")
         cluster_pct = h.get("largest_cluster_pct", 0.0)
         cluster_n = h.get("largest_cluster_wallets", 0)
