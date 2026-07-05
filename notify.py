@@ -206,6 +206,13 @@ def format_message(ctx: Dict[str, Any]) -> str:
                 else:
                     lines.append(f"  📝 {html.escape(ev['text'])} — <i>{src_txt}</i>")
 
+        ai = nar.get("ai", {})
+        if ai.get("available"):
+            ai_emoji = {"organik": "✅", "campuran": "🟡", "terkoordinasi": "🔴"}.get(ai["authenticity"], "")
+            lines.append(
+                f"─ 🤖 AI check: {ai['authenticity']} {ai_emoji} — <i>{html.escape(ai['summary'])}</i>"
+            )
+
         # X (Twitter) tak bisa di-API gratis -> sisipkan link cashtag & community
         # langsung di blok narasi (bukan cuma di baris link bawah) supaya user
         # cek "vibe" manual sebagai bagian dari due diligence narasi, bukan afterthought.
