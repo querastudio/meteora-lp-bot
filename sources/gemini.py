@@ -117,6 +117,7 @@ def assess_narrative(symbol: str, category: str, nar: Dict[str, Any]) -> Dict[st
                 "score_multiplier": _AUTHENTICITY_MULTIPLIER[authenticity],
             }
         )
+        log.info("Gemini OK utk $%s: %s (x%.2f)", symbol, authenticity, out["score_multiplier"])
     except Exception as e:  # noqa: BLE001
         log.info("Gemini gagal utk $%s: %s (degrade)", symbol, e)
     return out
