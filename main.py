@@ -21,7 +21,7 @@ import notify
 import scoring
 import state as state_mod
 from screening import hard_filters, holders, lp_quality, volatility
-from sources import dexscreener, geckoterminal, helius, meteora, narrative
+from sources import dexscreener, geckoterminal, gemini, helius, meteora, narrative
 
 logging.basicConfig(
     level=logging.INFO,
@@ -135,6 +135,14 @@ def _process_candidate(pool: Dict[str, Any], st: Dict[str, Any], sol_price: floa
 
     # ---- STAGE 7: narasi viral (degrade gracefully) ----
     nar = narrative.evaluate_narrative(metrics.get("name", ""), symbol)
+
+    # ---- Sintesis narasi AI (opsional, soft nudge -- lihat sources/gemini.py) ----
+    # Cuma nudge nar['score'] dlm rentang 0.6-1.0x, TIDAK pernah menyentuh
+    # hard gate. Degrade gracefully kalau API gagal/key kosong.
+    nar_ai = gemini.assess_narrative(symbol, nar.get("category", "unknown"), nar)
+    if nar_ai.get("available"):
+        nar["score"] = round(nar.get("score", 0.0) * nar_ai["score_multiplier"], 3)
+    nar["ai"] = nar_ai
 
     # ---- MOMENTUM VWAP (opsional, soft score -- degrade gracefully) ----
     # Pakai pool address yg SAMA dgn sumber harga "sekarang" (best-pair

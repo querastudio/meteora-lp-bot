@@ -74,6 +74,11 @@ def build_sample_ctx() -> dict:
             "total_comments": 980, "subreddit_count": 8, "posts_last24h": 6,
         },
         "news": {"available": True, "article_count": 12, "domain_count": 6},
+        "ai": {
+            "available": True, "authenticity": "organik",
+            "summary": "Pembahasan datang dari komunitas & sumber berita berbeda, bukan pola pesan seragam.",
+            "score_multiplier": 1.0,
+        },
     }
     warnings = ["LP-lock belum terverifikasi otomatis — cek manual"]
 

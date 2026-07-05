@@ -45,6 +45,7 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 HELIUS_API_KEY = os.getenv("HELIUS_API_KEY", "")
 YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY", "")  # opsional (Stage 7)
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")     # opsional (sintesis narasi AI)
 
 
 # ---------------------------------------------------------------------------
@@ -164,6 +165,13 @@ NARRATIVE_NEWS_ARTICLES_CAP = _env_float("NARRATIVE_NEWS_ARTICLES_CAP", 20)
 NARRATIVE_REDDIT_SUBREDDIT_CAP = _env_float("NARRATIVE_REDDIT_SUBREDDIT_CAP", 10)
 NARRATIVE_YOUTUBE_CHANNEL_CAP = _env_float("NARRATIVE_YOUTUBE_CHANNEL_CAP", 10)
 NARRATIVE_NEWS_DOMAIN_CAP = _env_float("NARRATIVE_NEWS_DOMAIN_CAP", 8)
+
+# --- Sintesis narasi via Gemini API gratis (opsional, HANYA soft-nudge) ---
+# Klasifikasi organik/campuran/terkoordinasi dari kutipan Reddit/News yang
+# sudah lolos filter relevansi. Skor dikalikan (0.6-1.0), TIDAK additif,
+# dan TIDAK pernah menyentuh hard gate keamanan/holder. Lihat sources/gemini.py.
+GEMINI_NARRATIVE_ENABLED = _env_bool("GEMINI_NARRATIVE_ENABLED", True)
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash-lite")
 
 
 # ---------------------------------------------------------------------------
