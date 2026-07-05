@@ -75,22 +75,43 @@ def detect_category(name: str, symbol: str) -> str:
 # di berita/post/video yang SAMA SEKALI bukan soal token ini (mis. "Germany's
 # Second Chance for Growth"). Tanpa filter ini breadth/volume/evidence jadi
 # noise murni -- bukan sinyal narasi token, false "VIRAL".
+#
+# Kasus lebih halus (nyata: token cow-emoji "$0x" di pump.fun): simbol yang
+# BERTABRAKAN dgn ticker proyek crypto lain yg SUDAH ESTABLISHED (mis. "0x"
+# jg ticker 0x Protocol/ZRX, proyek DeFi asli tak berkaitan). Keyword generik
+# spt "crypto"/"blockchain"/"market cap" JUSTRU lolos di berita proyek lain
+# itu -- bukan sinyal token kita. Selain itu keyword pendek spt "coin"/
+# "token" match sbg SUBSTRING di kata tak berkaitan ("CoinMarketCap",
+# "Tokenized") kalau dicek pakai `in` biasa, bukan word-boundary.
+#
+# Fix: keyword wajib SPESIFIK Solana-memecoin (bukan istilah crypto umum yg
+# bisa dipakai proyek established mana pun), dan dicocokkan pakai regex
+# word-boundary supaya tak ketipu substring semacam itu.
 # ---------------------------------------------------------------------------
-_CRYPTO_CONTEXT_KEYWORDS = (
-    "crypto", "coin", "token", "solana", "memecoin", "meme coin",
-    "blockchain", "dex", "pump.fun", "pumpfun", "web3", "airdrop",
-    "market cap", "mcap", "altcoin", "defi", "trader", "trading",
+_MEMECOIN_CONTEXT_KEYWORDS = (
+    "solana", "pump.fun", "pumpfun", "memecoin", "meme coin", "meme-coin",
+    "dexscreener", "raydium", "moonshot", "bonding curve", "rug pull",
+    "gmgn", "birdeye", "meteora", "dlmm", "shitcoin", "degen",
+)
+_MEMECOIN_CONTEXT_RE = re.compile(
+    r"\b(?:" + "|".join(re.escape(k) for k in _MEMECOIN_CONTEXT_KEYWORDS) + r")\b",
+    re.IGNORECASE,
 )
 
 
 def _looks_crypto_related(text: str, symbol: str) -> bool:
-    """True bila teks eksplisit soal crypto ATAU pakai cashtag simbolnya."""
+    """
+    True bila teks pakai cashtag simbolnya (word-boundary, bukan substring)
+    ATAU eksplisit soal konteks Solana-memecoin. SENGAJA tak pakai istilah
+    crypto generik ("crypto", "token", "blockchain", dst) -- proyek established
+    tak berkaitan yg kebetulan bertabrakan ticker (mis. $0x vs 0x Protocol/ZRX)
+    pasti juga pakai istilah itu, jadi tak diskriminatif.
+    """
     if not text:
         return False
-    t = text.lower()
-    if f"${symbol.lower()}" in t:
+    if re.search(rf"\${re.escape(symbol)}\b", text, re.IGNORECASE):
         return True
-    return any(kw in t for kw in _CRYPTO_CONTEXT_KEYWORDS)
+    return bool(_MEMECOIN_CONTEXT_RE.search(text))
 
 
 # ---------------------------------------------------------------------------
