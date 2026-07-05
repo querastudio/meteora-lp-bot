@@ -46,11 +46,6 @@ def build_sample_ctx() -> dict:
         "available": True, "vwap": 0.00623, "ratio_pct": 30.3,
         "above_vwap": True, "momentum_score": 0.88, "candle_count": 96,
     }
-    lunarcrush = {
-        "available": True, "galaxy_score": 72.0, "sentiment_pct": 81.0,
-        "num_contributors": 340, "num_posts": 512, "interactions_24h": 89000,
-        "social_score": 0.72,
-    }
     narrative = {
         "category": "animal", "keyword": symbol, "score": 0.88,
         "viral_label": "🔥 SANGAT VIRAL", "durability_label": "TAHAN LAMA",
@@ -101,7 +96,6 @@ def build_sample_ctx() -> dict:
         "lp": lp,
         "vol": vol,
         "vwap": vwap,
-        "lunarcrush": lunarcrush,
         "narrative": narrative,
         "warnings": warnings,
         "links": links,
