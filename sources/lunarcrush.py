@@ -1,19 +1,24 @@
 """
 sources/lunarcrush.py — Sinyal sosial (Galaxy Score, sentiment, kontributor)
-via LunarCrush API. BERBAYAR (~$24/bulan tier Individual) -- BEDA dari semua
-sumber lain di bot ini yang gratis. User pilih tetap pakai ini utk sinyal
-X/sosial yang tak bisa didapat gratis dgn aman (X API resmi $200+/bln, GMGN
-X Tracker tak ada API publik, CoinMarketCap/LunarCrush free tier tak include
-data sosial, scraping X = ToS-violation & risiko banned -- lihat diskusi sesi
-ini). LunarCrush resmi, ToS-compliant, dibangun khusus utk social intelligence
-crypto (bukan scraping pihak kita sendiri).
+via LunarCrush API (opsional). Dipakai krn X/Twitter adalah sumber narasi
+utama dunia memecoin dan tak ada jalan resmi+gratis+ToS-aman lain utk
+mengaksesnya (X API resmi $200+/bln, GMGN X Tracker tak ada API publik,
+scraping X = ToS-violation & risiko banned -- lihat riwayat diskusi sesi ini).
 
-KETERBATASAN PENTING (dikonfirmasi user via cek manual dulu sebelum bayar):
-LunarCrush TIDAK meng-index token yang baru rilis hitungan jam -- cuma coin
-yang lebih mapan atau topik lagi populer. Jadi utk kandidat paling fresh,
-endpoint ini nyaris pasti 404/kosong -- itu WAJAR (bukan bug), degrade
-gracefully (skor netral 0.5) spt semua soft signal lain di bot ini, BUKAN
-hard gate.
+STATUS TIER GRATIS: BELUM PASTI. Dokumentasi publik LunarCrush simpang siur
+-- sebagian sumber bilang free tier "no social data or API access", sebagian
+lain bilang free plan tetap bisa generate API key & akses data sosial
+terbatas. Kita coba pakai key dari tier gratis dulu; kalau endpoint balas
+401/403 (bukan 404 "belum ter-index"), berarti memang perlu upgrade ke tier
+berbayar (~$24/bln Individual) -- status code aslinya akan kelihatan di log
+warning bawaan sources/http.py (baris "HTTP GET lunarcrush.com -> 401/403"),
+degrade gracefully spt biasa, TIDAK bikin run gagal.
+
+KETERBATASAN LAIN (dikonfirmasi user via cek manual): LunarCrush TIDAK
+meng-index token yang baru rilis hitungan jam -- cuma coin yang lebih mapan
+atau topik lagi populer. Jadi utk kandidat paling fresh, endpoint ini nyaris
+pasti 404/kosong -- itu WAJAR (bukan bug), degrade gracefully (skor netral
+0.5) spt semua soft signal lain di bot ini, BUKAN hard gate.
 
 API: https://github.com/lunarcrush/api (v4, topic endpoint).
 """
