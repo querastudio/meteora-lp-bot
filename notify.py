@@ -79,6 +79,7 @@ def format_message(ctx: Dict[str, Any]) -> str:
     vol = ctx["vol"]
     vwap = ctx.get("vwap", {})
     lc = ctx.get("lunarcrush", {})
+    jup = ctx.get("jupiter", {})
     nar = ctx["narrative"]
     links = ctx["links"]
     warns: List[str] = ctx.get("warnings", [])
@@ -121,6 +122,13 @@ def format_message(ctx: Dict[str, Any]) -> str:
             lines.append("─ Cluster: tak terdeteksi wallet berdekatan ✅")
     else:
         lines.append("─ Holder: data tak tersedia ⚠️")
+    if jup.get("available"):
+        label = jup.get("organic_label") or "?"
+        jup_emoji = {"high": "✅", "medium": "🟡", "low": "🔴"}.get(label, "")
+        lines.append(
+            f"─ Jupiter Organic Score: {jup.get('organic_score',0):.0f}/100 "
+            f"({label}) {jup_emoji} <i>(volume asli vs bot/wash-trading)</i>"
+        )
     lines.append("")
 
     # KUALITAS LP

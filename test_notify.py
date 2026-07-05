@@ -51,6 +51,10 @@ def build_sample_ctx() -> dict:
         "num_contributors": 340, "num_posts": 512, "interactions_24h": 89000,
         "social_score": 0.72,
     }
+    jupiter_organic = {
+        "available": True, "organic_score": 78.0, "organic_label": "high",
+        "organic_signal_score": 0.78,
+    }
     narrative = {
         "category": "animal", "keyword": symbol, "score": 0.88,
         "viral_label": "🔥 SANGAT VIRAL", "durability_label": "TAHAN LAMA",
@@ -102,6 +106,7 @@ def build_sample_ctx() -> dict:
         "vol": vol,
         "vwap": vwap,
         "lunarcrush": lunarcrush,
+        "jupiter": jupiter_organic,
         "narrative": narrative,
         "warnings": warnings,
         "links": links,

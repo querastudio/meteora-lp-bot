@@ -32,6 +32,7 @@ def compute(
     warnings: List[str],
     vwap: Dict[str, Any] = None,
     lunarcrush: Dict[str, Any] = None,
+    jupiter: Dict[str, Any] = None,
 ) -> Dict[str, Any]:
     """
     Hitung skor & verdict. Return dict:
@@ -41,6 +42,7 @@ def compute(
     total_weight = sum(w.values())
     vwap = vwap or {}
     lunarcrush = lunarcrush or {}
+    jupiter = jupiter or {}
 
     # Skor per komponen (masing-masing 0-1) x bobot.
     components = {
@@ -53,6 +55,7 @@ def compute(
         "narrative": narrative.get("score", 0.0),
         "vwap_momentum": vwap.get("momentum_score", 0.5),
         "lunarcrush_social": lunarcrush.get("social_score", 0.5),
+        "jupiter_organic": jupiter.get("organic_signal_score", 0.5),
     }
 
     weighted = sum(components[k] * w[k] for k in components)
