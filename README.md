@@ -28,6 +28,7 @@ Token digugurkan sedini mungkin untuk hemat rate limit API gratis.
 | 6 | Volatilitas "turun-stabil" vs "mati vertikal" | Dexscreener+state | Soft + SKIP |
 | 7 | Narasi: **Viralitas** + **Daya Tahan** (kualitatif+kuantitatif) + AI check organik/terkoordinasi (opsional) | Trends/YouTube/Reddit/News/Gemini+Groq | Soft |
 | — | Momentum **VWAP** (harga vs rata-rata tertimbang volume sejak pool dibuat) | GeckoTerminal OHLCV | Soft |
+| — | Sinyal sosial X (**Galaxy Score**/sentiment, opsional **BERBAYAR**) | LunarCrush | Soft |
 
 **Soal AI check narasi (Gemini + fallback Groq, opsional):** hanya menilai apakah
 kutipan Reddit/News yang sudah lolos filter relevansi terlihat organik atau pola
@@ -41,6 +42,19 @@ AI check juga DI-SKIP total kalau bukti Reddit+News terlalu tipis
 (`AI_MIN_REDDIT_POSTS`/`AI_MIN_NEWS_ARTICLES` di config.py) — lebih baik
 "tak menilai" drpd LLM memaksa vonis organik/terkoordinasi dari 1-2 kutipan
 yang bahkan bisa salah topik (Google News RSS kadang match longgar).
+
+**Soal LunarCrush (opsional):** dipakai karena X/Twitter adalah sumber narasi
+utama dunia memecoin dan tak ada jalan resmi+gratis+ToS-aman lain utk
+mengaksesnya (X API resmi $200+/bln; scraping = risiko ban & pelanggaran ToS,
+lihat riwayat diskusi). **Coba dulu pakai API key dari tier GRATIS** LunarCrush
+(sign up di https://lunarcrush.com/pricing/, tanpa kartu kredit) — status
+apakah tier gratis benar-benar include data sosial masih belum pasti dari
+dokumentasi publik mereka, jadi kita verifikasi langsung dari log (401/403
+di log = perlu upgrade ~$24/bln tier Individual; kalau berhasil, gratis).
+**Keterbatasan lain yang sudah dikonfirmasi manual:** LunarCrush TIDAK
+meng-index token yang baru rilis hitungan jam — jadi utk kandidat paling
+fresh, sinyal ini nyaris selalu n/a (wajar, bukan bug). Kosongkan
+`LUNARCRUSH_API_KEY` utk skip total (tak ada dampak ke pipeline).
 
 **Hard gate gagal → SKIP (dibuang).** Yang lolos semua hard gate diberi **soft score
 0–100** (bobot bisa dituning di `config.py`) → verdict STRONG/WATCH.

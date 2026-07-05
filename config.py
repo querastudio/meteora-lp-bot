@@ -47,6 +47,7 @@ HELIUS_API_KEY = os.getenv("HELIUS_API_KEY", "")
 YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY", "")  # opsional (Stage 7)
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")     # opsional (sintesis narasi AI)
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")         # opsional (fallback sintesis narasi AI)
+LUNARCRUSH_API_KEY = os.getenv("LUNARCRUSH_API_KEY", "")  # opsional, BERBAYAR (~$24/bln)
 
 
 # ---------------------------------------------------------------------------
@@ -191,6 +192,11 @@ GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 AI_MIN_REDDIT_POSTS = _env_int("AI_MIN_REDDIT_POSTS", 2)
 AI_MIN_NEWS_ARTICLES = _env_int("AI_MIN_NEWS_ARTICLES", 3)
 
+# --- LunarCrush (opsional, BERBAYAR ~$24/bln) -- Galaxy Score/sentiment X ---
+# TIDAK meng-index token super baru (dikonfirmasi manual) -- wajar 404 utk
+# kandidat fresh, degrade gracefully. Lihat sources/lunarcrush.py.
+LUNARCRUSH_ENABLED = _env_bool("LUNARCRUSH_ENABLED", True)
+
 
 # ---------------------------------------------------------------------------
 # SCORING ENGINE — BOBOT SOFT SCORE (total mencerminkan profil pasif-konservatif)
@@ -212,6 +218,10 @@ WEIGHTS = {
     # Momentum VWAP (opsional) — sinyal timing/hype, bukan keamanan/fee inti,
     # jadi bobotnya kecil & degrade ke netral (0.5) kalau data tak tersedia.
     "vwap_momentum": _env_float("W_VWAP_MOMENTUM", 8.0),
+    # LunarCrush Galaxy Score (opsional, berbayar) — sinyal sosial X asli.
+    # Nyaris selalu netral (0.5) utk token super baru (belum ter-index),
+    # jadi bobotnya kecil spy tak mendominasi skor saat n/a.
+    "lunarcrush_social": _env_float("W_LUNARCRUSH", 8.0),
 }
 # Total bobot dinormalisasi otomatis di scoring.py (skor akhir tetap 0-100
 # walau total di atas tak persis 100).
