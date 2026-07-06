@@ -129,6 +129,7 @@ def format_message(ctx: Dict[str, Any]) -> str:
             f"─ Jupiter Organic Score: {jup.get('organic_score',0):.0f}/100 "
             f"({label}) {jup_emoji} <i>(volume asli vs bot/wash-trading)</i>"
         )
+    lines.extend(_gmgn_lines(ctx.get("gmgn", {})))
     lines.append("")
 
     # KUALITAS LP
@@ -266,6 +267,39 @@ def _narrative_lines(nar: Dict[str, Any], lc: Dict[str, Any], links: Dict[str, s
     return lines
 
 
+def _gmgn_lines(gm: Dict[str, Any]) -> List[str]:
+    """
+    Blok GMGN OpenAPI (dipakai format_message & format_manual_message --
+    identik). INFORMASIONAL SAJA -- security cross-check thd Helius, dev
+    holding %, dan tag holder (funding-source tracing asli GMGN, beda dari
+    proxy waktu-pembuatan di holders.py). Tak menyentuh skor/hard gate.
+    """
+    lines: List[str] = []
+    gm = gm or {}
+    sec = gm.get("security") or {}
+    dev = gm.get("dev_holding") or {}
+    tags = gm.get("holder_tags") or {}
+
+    if sec.get("available"):
+        hp_emoji = "🔴" if sec.get("is_honeypot") else "✅"
+        os_label = sec.get("open_source") or "?"
+        lines.append(
+            f"─ GMGN Security: honeypot {hp_emoji} | source {html.escape(os_label)} | "
+            f"tax {sec.get('buy_tax',0)*100:.0f}%/{sec.get('sell_tax',0)*100:.0f}% | "
+            f"rug_ratio {sec.get('rug_ratio',0)*100:.0f}%"
+        )
+    if dev.get("available"):
+        lines.append(f"─ GMGN Dev holding: {dev.get('dev_holding_pct',0):.1f}% supply")
+    if tags.get("available"):
+        lines.append(
+            f"─ GMGN Top holder tags: smart money {tags.get('smart_money_pct',0):.1f}% | "
+            f"bundler {tags.get('bundler_pct',0):.1f}% | sniper {tags.get('sniper_pct',0):.1f}% | "
+            f"rat_trader {tags.get('rat_trader_pct',0):.1f}% "
+            f"<i>(funding-source tracing GMGN, bukan proxy waktu)</i>"
+        )
+    return lines
+
+
 # ---------------------------------------------------------------------------
 # Format pesan ANALISA MANUAL (user kirim CA ke chat bot -- lihat
 # sources/telegram_inbound.py & main.py:analyze_by_mint)
@@ -358,6 +392,7 @@ def format_manual_message(ctx: Dict[str, Any]) -> str:
         lines.append(
             f"─ Jupiter Organic Score: {jup.get('organic_score',0):.0f}/100 ({label}) {jup_emoji}"
         )
+    lines.extend(_gmgn_lines(ctx.get("gmgn", {})))
     lines.append("")
 
     if pool:
