@@ -319,7 +319,10 @@ def format_manual_message(ctx: Dict[str, Any]) -> str:
         f"─ MCap ${_h(m.get('market_cap', 0))} | Vol24h ${_h(m.get('volume_h24', 0))} {_yn(stage2_pass)}"
     )
     if not stage2_pass and stage2_reasons:
-        lines.append(f"  ⚠️ {'; '.join(stage2_reasons)}")
+        # html.escape WAJIB -- reasons berisi "<"/">" literal (mis. "vol24h
+        # $X < $Y"), tanpa escape Telegram parse_mode HTML menolak SELURUH
+        # pesan (400 "Unsupported start tag") krn dikira tag rusak.
+        lines.append(f"  ⚠️ {html.escape('; '.join(stage2_reasons))}")
     if pool:
         lines.append(
             f"─ TVL ${_h(pool.get('tvl_usd', 0))} | Bin {pool.get('bin_step','?')} | "
@@ -335,7 +338,7 @@ def format_manual_message(ctx: Dict[str, Any]) -> str:
         f"no-tax {_yn(tax_pct <= config.MAX_TRANSFER_FEE_BPS/100)} {_yn(stage3_pass)}"
     )
     if not stage3_pass and stage3_reasons:
-        lines.append(f"  ⚠️ {'; '.join(stage3_reasons)}")
+        lines.append(f"  ⚠️ {html.escape('; '.join(stage3_reasons))}")
     if h.get("available"):
         lines.append(f"─ Top10: {h['top10_pct']}% {_yn(h['top10_gate_pass'])}")
         coord = h.get("coordination_label", "n/a")
