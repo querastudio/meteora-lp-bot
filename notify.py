@@ -313,19 +313,26 @@ def _gmgn_lines(gm: Dict[str, Any]) -> List[str]:
             f"<i>(jumlah wallet, bukan % supply -- funding-source tracing GMGN)</i>"
         )
     if top100.get("available"):
-        # fresh_pct (tag "fresh_wallet") & is_new_pct (flag is_new GMGN) bisa
-        # overlap tapi bukan subset pasti -- ambil yg terbesar sbg sinyal
-        # utama drpd dijumlah (hindari double-count wallet yg sama).
-        fresh_signal = max(top100.get("fresh_pct", 0), top100.get("is_new_pct", 0))
-        susp_pct = top100.get("suspicious_pct", 0)
-        worst = max(fresh_signal, susp_pct)
-        flag = "🔴" if worst >= 50 else ("🟡" if worst >= 25 else "✅")
+        risk = top100.get("scam_risk_pct", 0)
+        flag = "🔴" if risk >= 50 else ("🟡" if risk >= 25 else "✅")
         lines.append(
-            f"─ GMGN Top100 cluster: {flag} fresh-wallet {fresh_signal:.0f}% supply | "
-            f"mencurigakan {susp_pct:.0f}% supply "
-            f"<i>(dari {top100.get('sample_count',0)} holder teratas, funding-source tracing GMGN -- "
-            f"tinggi = indikasi bundler/wash trading)</i>"
+            f"─ GMGN Top100 pola scam: {flag} risiko tertinggi {risk:.0f}% supply "
+            f"<i>(dari {top100.get('sample_count',0)} holder teratas, tag asli funding-source GMGN)</i>"
         )
+        # Rincian per kategori -- cuma tampilkan yg > 0% spy notif tak penuh
+        # nol semua (mayoritas token wajar tak kena tag2 ini sama sekali).
+        breakdown = [
+            ("wash-trader", top100.get("wash_trader_pct", 0)),
+            ("sandwich-bot", top100.get("sandwich_bot_pct", 0)),
+            ("bundler", top100.get("bundler_pct", 0)),
+            ("rat_trader", top100.get("rat_trader_pct", 0)),
+            ("fresh-wallet", top100.get("fresh_pct", 0)),
+            ("wallet baru (is_new)", top100.get("is_new_pct", 0)),
+            ("mencurigakan (is_suspicious)", top100.get("is_suspicious_pct", 0)),
+        ]
+        nonzero = [f"{label} {pct:.0f}%" for label, pct in breakdown if pct > 0]
+        if nonzero:
+            lines.append(f"  ⚠️ {' | '.join(nonzero)} <i>(% supply top-100)</i>")
     return lines
 
 

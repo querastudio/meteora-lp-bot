@@ -267,39 +267,58 @@ def top_holder_tags(mint: str, chain: str = "sol") -> Dict[str, Any]:
     return out
 
 
+_SCAM_PATTERN_TAGS = {
+    "wash_trader": "wash_trader_pct",
+    "sandwich_bot": "sandwich_bot_pct",
+    "bundler": "bundler_pct",
+    "rat_trader": "rat_trader_pct",
+    "fresh_wallet": "fresh_pct",
+}
+
+
 def top100_cluster_analysis(mint: str, chain: str = "sol") -> Dict[str, Any]:
     """
-    Return { available, fresh_pct, fresh_count, is_new_pct, is_new_count,
-             suspicious_pct, suspicious_count, sample_count, coverage_pct }.
+    Return { available, sample_count, coverage_pct, scam_risk_pct,
+             fresh_pct, wash_trader_pct, sandwich_bot_pct, bundler_pct,
+             rat_trader_pct, is_new_pct, is_suspicious_pct } (tiap _pct
+             punya pasangan _count).
 
     Fitur "Top 100 Holders Analysis" SUNGGUHAN spt skill resmi GMGN (beda
     dari top_holder_tags() yg cuma count level-token dari wallet_tags_stat)
-    -- menjawab pertanyaan "kalau mayoritas top 100 fresh wallet/saldo
-    seragam kecil, itu indikasi cluster bundler/wash trading" dgn agregasi
-    % SUPPLY (bukan cuma jumlah wallet) per sinyal, dari /v1/market/
-    token_top_holders (top 100 baris asli, per-wallet).
+    -- deteksi POLA SCAM (cluster bundler, wash trading, sandwich bot,
+    fresh-wallet farm) dgn agregasi % SUPPLY (bukan cuma jumlah wallet)
+    per kategori, dari /v1/market/token_top_holders (top 100 baris asli,
+    per-wallet, funding-source tracing GMGN -- bukan proxy).
 
-    Eksperimen SEBELUMNYA (top_holder_tags() versi awal) nyoba field
-    'tags' tapi cuma sample 3 HOLDER TERBESAR per token -- semua kosong,
-    disimpulkan "field tak berguna". Itu BIAS SAMPLING: holder terbesar
-    biasanya pool/whale lama, BUKAN representatif tail top-100 tempat
-    fresh-wallet farm biasanya nyebar. Log live sebelumnya SEMPAT kasih
-    lihat holder non-top-3 di $Jotchua punya tags=['fresh_wallet'] --
-    jadi field 'tags' KEMUNGKINAN valid, cuma perlu di-scan SEMUA 100
-    baris, bukan cuma 3 teratas.
+    Vocabulary tag DIKONFIRMASI dari log live (6 Juli 2026, 3 token nyata):
+    field 'tags' per-wallet berisi "wash_trader"/"sandwich_bot"/
+    "fresh_wallet"/"bluechip_owner"/"kol"/"fomo" + tag platform trading
+    (axiom/photon/trojan/bullx/padre/gmgn -- bukan sinyal risiko, cuma
+    tool yg dipakai wallet itu trading, DIABAIKAN di sini). "bundler" &
+    "rat_trader" belum pernah muncul di 3 sampel, tapi tetap dimasukkan
+    (konsisten dgn kategori wallet_tags_stat) krn kemungkinan muncul di
+    token lain -- aman kalau tak pernah ketemu (count tetap 0).
 
-    is_new/is_suspicious (boolean eksplisit per wallet dari GMGN) dipakai
-    sbg sinyal utama krn namanya tak ambigu; 'fresh_wallet' dari tags jadi
-    sinyal pelengkap. TEMPORARY: log distribusi tag lengkap (semua 100
-    baris) skalian, spy vocabulary tag lain (mis. "bundler") bisa
-    dikonfirmasi/ditambahkan dari data nyata di run berikutnya.
+    Eksperimen SEBELUMNYA (top_holder_tags() versi awal) nyoba field 'tags'
+    tapi cuma sample 3 HOLDER TERBESAR per token -- semua kosong,
+    disimpulkan keliru "field tak berguna". Itu BIAS SAMPLING: holder
+    terbesar biasanya pool/whale lama, BUKAN representatif tail top-100
+    tempat fresh-wallet farm/wash-trader biasanya nyebar -- makanya di sini
+    di-scan SEMUA 100 baris.
+
+    scam_risk_pct = MAX dari semua kategori individual (bukan dijumlah,
+    supaya tak double-count wallet yg sama kena >1 tag) -- dipakai sbg
+    sinyal ringkas "seberapa parah pola scam di top-100 token ini".
     """
-    out = {
-        "available": False, "fresh_pct": 0.0, "fresh_count": 0,
+    out: Dict[str, Any] = {
+        "available": False, "sample_count": 0, "coverage_pct": 0.0,
+        "scam_risk_pct": 0.0,
         "is_new_pct": 0.0, "is_new_count": 0,
-        "suspicious_pct": 0.0, "suspicious_count": 0,
-        "sample_count": 0, "coverage_pct": 0.0,
+        "is_suspicious_pct": 0.0, "is_suspicious_count": 0,
     }
+    for pct_key in _SCAM_PATTERN_TAGS.values():
+        out[pct_key] = 0.0
+        out[pct_key.replace("_pct", "_count")] = 0
     try:
         data = _get("/v1/market/token_top_holders", {"chain": chain, "address": mint, "limit": 100})
         if not data:
@@ -311,8 +330,10 @@ def top100_cluster_analysis(mint: str, chain: str = "sol") -> Dict[str, Any]:
             return out
 
         tag_counter: Dict[str, int] = {}
-        fresh_pct = new_pct = susp_pct = coverage = 0.0
-        fresh_n = new_n = susp_n = 0
+        tag_pct: Dict[str, float] = {k: 0.0 for k in _SCAM_PATTERN_TAGS}
+        tag_n: Dict[str, int] = {k: 0 for k in _SCAM_PATTERN_TAGS}
+        new_pct = susp_pct = coverage = 0.0
+        new_n = susp_n = 0
         for h in rows:
             if not isinstance(h, dict):
                 continue
@@ -321,9 +342,10 @@ def top100_cluster_analysis(mint: str, chain: str = "sol") -> Dict[str, Any]:
             tags = {str(t).strip().lower() for t in (h.get("tags") or [])}
             for t in tags:
                 tag_counter[t] = tag_counter.get(t, 0) + 1
-            if "fresh_wallet" in tags:
-                fresh_pct += pct
-                fresh_n += 1
+            for tag_name in _SCAM_PATTERN_TAGS:
+                if tag_name in tags:
+                    tag_pct[tag_name] += pct
+                    tag_n[tag_name] += 1
             if h.get("is_new") is True:
                 new_pct += pct
                 new_n += 1
@@ -331,21 +353,30 @@ def top100_cluster_analysis(mint: str, chain: str = "sol") -> Dict[str, Any]:
                 susp_pct += pct
                 susp_n += 1
 
+        for tag_name, pct_key in _SCAM_PATTERN_TAGS.items():
+            out[pct_key] = round(tag_pct[tag_name], 1)
+            out[pct_key.replace("_pct", "_count")] = tag_n[tag_name]
         out.update({
             "available": True,
-            "fresh_pct": round(fresh_pct, 1), "fresh_count": fresh_n,
             "is_new_pct": round(new_pct, 1), "is_new_count": new_n,
-            "suspicious_pct": round(susp_pct, 1), "suspicious_count": susp_n,
+            "is_suspicious_pct": round(susp_pct, 1), "is_suspicious_count": susp_n,
             "sample_count": len(rows), "coverage_pct": round(coverage, 1),
         })
+        out["scam_risk_pct"] = round(max(
+            [out[k] for k in _SCAM_PATTERN_TAGS.values()] + [new_pct, susp_pct]
+        ), 1)
+
         log.info(
             "GMGN top100 tag distribution (semua %d baris) utk mint %s...: %s",
             len(rows), mint[:6], tag_counter,
         )
         log.info(
-            "GMGN top100_cluster_analysis OK utk mint %s...: fresh_wallet_tag=%.1f%% (%d) "
-            "is_new=%.1f%% (%d) is_suspicious=%.1f%% (%d) dari %d holder (coverage %.1f%% supply)",
-            mint[:6], fresh_pct, fresh_n, new_pct, new_n, susp_pct, susp_n, len(rows), coverage,
+            "GMGN top100_cluster_analysis OK utk mint %s...: scam_risk=%.1f%% "
+            "(wash_trader=%.1f%% sandwich_bot=%.1f%% bundler=%.1f%% rat_trader=%.1f%% "
+            "fresh=%.1f%% is_new=%.1f%% is_suspicious=%.1f%%) dari %d holder (coverage %.1f%% supply)",
+            mint[:6], out["scam_risk_pct"], out["wash_trader_pct"], out["sandwich_bot_pct"],
+            out["bundler_pct"], out["rat_trader_pct"], out["fresh_pct"], new_pct, susp_pct,
+            len(rows), coverage,
         )
     except Exception as e:  # noqa: BLE001
         log.info("GMGN top100_cluster_analysis gagal utk mint %s...: %s (degrade)", mint[:6], e)
