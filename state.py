@@ -123,3 +123,68 @@ def get_telegram_offset(state: Dict[str, Any]) -> int:
 
 def set_telegram_offset(state: Dict[str, Any], offset: int) -> None:
     state["telegram_offset"] = offset
+
+
+# ---------------------------------------------------------------------------
+# Merge state (dipakai scan.yml step "Commit state" -- lihat CLI di bawah).
+#
+# Kenapa perlu ini: dua run cron bisa saling susul (workflow_dispatch/schedule
+# checkout ref yang sudah dipin sejak di-queue -- lihat catatan di scan.yml),
+# jadi saat run A mau commit balik state_data.json, remote bisa sudah maju
+# duluan (dipush run B). git rebase/merge BERBASIS BARIS gampang KONFLIK di
+# file JSON walau isinya semantically bisa digabung -- dan retry loop lama
+# (`git pull --rebase ... || true`) menelan kegagalan itu lalu diam-diam
+# kehilangan seluruh update run A (push jadi no-op "Everything up-to-date"
+# tapi dilaporkan sukses). merge() ini menggabungkan di level JSON (union
+# per-token) supaya race TAK PERNAH kehilangan data secara diam-diam.
+# ---------------------------------------------------------------------------
+def merge(remote: Dict[str, Any], local: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Gabungkan state `remote` (origin, mungkin sudah diupdate run lain) dengan
+    `local` (hasil run ini). Token yang HANYA disentuh salah satu sisi ->
+    dipertahankan apa adanya (tak pernah hilang). Token yang disentuh KEDUA
+    sisi (jarang -- 2 run beririsan token) -> per-field, ambil yang paling
+    "maju" (riwayat harga terpanjang = paling banyak titik data terbaru;
+    last_notified_ts terbesar = notifikasi paling baru).
+    """
+    merged = dict(remote)
+    merged_tokens: Dict[str, Any] = dict(remote.get("tokens", {}))
+    for mint, local_tok in (local.get("tokens") or {}).items():
+        remote_tok = merged_tokens.get(mint)
+        if not remote_tok:
+            merged_tokens[mint] = local_tok
+            continue
+        merged_tok = dict(remote_tok)
+        if len(local_tok.get("price_history", [])) >= len(remote_tok.get("price_history", [])):
+            merged_tok["price_history"] = local_tok.get("price_history", [])
+        if local_tok.get("symbol"):
+            merged_tok["symbol"] = local_tok["symbol"]
+        if local_tok.get("last_notified_ts", 0) >= remote_tok.get("last_notified_ts", 0):
+            if "last_verdict" in local_tok:
+                merged_tok["last_verdict"] = local_tok["last_verdict"]
+            if "last_notified_ts" in local_tok:
+                merged_tok["last_notified_ts"] = local_tok["last_notified_ts"]
+        merged_tokens[mint] = merged_tok
+    merged["tokens"] = merged_tokens
+    # Offset getUpdates: counter monoton, jangan pernah mundur.
+    merged["telegram_offset"] = max(
+        int(remote.get("telegram_offset", 0)), int(local.get("telegram_offset", 0))
+    )
+    return merged
+
+
+if __name__ == "__main__":
+    # CLI dipakai scan.yml: `python state.py <path-json-lokal>` -- baca
+    # state_data.json working-copy SAAT INI (harus sudah di-checkout fresh
+    # dari origin sebagai "remote"), gabung dengan snapshot lokal hasil run
+    # ini, tulis balik ke state_data.json (in-place, siap di-commit).
+    import sys
+
+    if len(sys.argv) != 2:
+        print("Usage: python state.py <local_snapshot.json>", file=sys.stderr)
+        sys.exit(1)
+
+    remote_state = load()
+    with open(sys.argv[1], "r", encoding="utf-8") as f:
+        local_state = json.load(f)
+    save(merge(remote_state, local_state))

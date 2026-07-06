@@ -67,20 +67,40 @@ jobs:
         if: ${{ inputs.mode != 'test_notify' }}
         # Simpan state antar-run dengan commit balik ke repo. Pakai [skip ci]
         # supaya commit ini TIDAK memicu workflow lagi (hindari loop).
+        #
+        # State di-MERGE level-JSON (state.py, bukan git rebase/merge
+        # berbasis baris) -- state_data.json gampang "konflik" di mata git
+        # walau isinya semantically bisa digabung (token berbeda). Retry
+        # loop LAMA (`git pull --rebase ... || true`) menelan kegagalan
+        # rebase itu lalu diam-diam kehilangan SELURUH update run ini (push
+        # jadi no-op tapi dilaporkan "state pushed") -- ditemukan nyata saat
+        # 2 run beririsan (lihat riwayat commit). Fix: tiap retry, checkout
+        # ULANG state_data.json dari origin terbaru, gabung dgn snapshot
+        # lokal hasil run ini (state.py --merge: union per-token, tak pernah
+        # kehilangan data), baru commit+push.
         run: |
           git config user.name "meteora-bot"
           git config user.email "bot@users.noreply.github.com"
-          if [[ -n "$(git status --porcelain state_data.json)" ]]; then
-            git add state_data.json
-            git commit -m "chore(state): update ATH & notif history [skip ci]"
-            # Rebase-aman terhadap run paralel, lalu push dengan retry ringan.
-            for i in 1 2 3; do
-              git pull --rebase --autostash origin ${{ github.ref_name }} || true
-              if git push origin HEAD:${{ github.ref_name }}; then
-                echo "state pushed"; break
-              fi
-              echo "push gagal, retry $i"; sleep $((i*3))
-            done
-          else
+          if [[ -z "$(git status --porcelain state_data.json)" ]]; then
             echo "state tidak berubah, tak ada commit"
+            exit 0
           fi
+          cp state_data.json /tmp/state_local_snapshot.json
+          for i in 1 2 3 4 5; do
+            git fetch origin ${{ github.ref_name }}
+            git checkout origin/${{ github.ref_name }} -- state_data.json
+            python state.py /tmp/state_local_snapshot.json
+            git add state_data.json
+            if git diff --cached --quiet; then
+              echo "state hasil merge sama dgn remote, tak perlu commit"
+              break
+            fi
+            git commit -m "chore(state): update ATH & notif history [skip ci]"
+            if git push origin HEAD:${{ github.ref_name }}; then
+              echo "state pushed (percobaan $i)"
+              break
+            fi
+            echo "push gagal (race dgn run lain), retry $i"
+            git reset --soft HEAD~1
+            sleep $((i*2))
+          done
