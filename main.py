@@ -136,35 +136,6 @@ def _process_candidate(pool: Dict[str, Any], st: Dict[str, Any], sol_price: floa
     # ---- STAGE 7: narasi viral (degrade gracefully) ----
     nar = narrative.evaluate_narrative(metrics.get("name", ""), symbol)
 
-    # ---- Sintesis narasi AI (opsional, soft nudge -- lihat sources/gemini.py) ----
-    # Cuma nudge nar['score'] dlm rentang 0.6-1.0x, TIDAK pernah menyentuh
-    # hard gate. Coba Gemini dulu; kalau gagal/limit, fallback ke Groq
-    # (rate limit gratisnya lebih longgar). Degrade gracefully kalau
-    # keduanya gagal/key kosong -- skor narasi tetap rule-based biasa.
-    #
-    # Gate bukti minimum: kalau Reddit & News keduanya terlalu tipis, JANGAN
-    # panggil AI sama sekali -- lebih baik "tak menilai" drpd menilai keliru
-    # dari data hampir kosong (lihat config.AI_MIN_REDDIT_POSTS/NEWS_ARTICLES).
-    reddit_cnt = nar.get("reddit", {}).get("post_count", 0)
-    news_cnt = nar.get("news", {}).get("article_count", 0)
-    has_enough_evidence = (
-        reddit_cnt >= config.AI_MIN_REDDIT_POSTS or news_cnt >= config.AI_MIN_NEWS_ARTICLES
-    )
-
-    nar_ai = {}
-    if has_enough_evidence:
-        nar_ai = gemini.assess_narrative(symbol, nar.get("category", "unknown"), nar)
-        if not nar_ai.get("available"):
-            nar_ai = groq.assess_narrative(symbol, nar.get("category", "unknown"), nar)
-    else:
-        log.info(
-            "$%s: bukti narasi terlalu tipis (reddit=%d, news=%d) -- skip AI check",
-            symbol, reddit_cnt, news_cnt,
-        )
-    if nar_ai.get("available"):
-        nar["score"] = round(nar.get("score", 0.0) * nar_ai["score_multiplier"], 3)
-    nar["ai"] = nar_ai
-
     # ---- MOMENTUM VWAP (opsional, soft score -- degrade gracefully) ----
     # Pakai pool address yg SAMA dgn sumber harga "sekarang" (best-pair
     # Dexscreener), bukan selalu pool Meteora -- token bisa trading di >1
@@ -181,6 +152,44 @@ def _process_candidate(pool: Dict[str, Any], st: Dict[str, Any], sol_price: floa
 
     # ---- JUPITER ORGANIC SCORE (gratis) -- penguat deteksi wash-trading ----
     jup = jupiter.organic_score(mint)
+
+    # ---- Sintesis AI (opsional -- lihat sources/gemini.py & ai_common.py) ----
+    # authenticity: nudge nar['score'] dlm rentang 0.6-1.0x dari kutipan
+    # Reddit/News SAJA, TIDAK pernah menyentuh hard gate.
+    # thesis: sintesis SEMUA metrik (LP/volatilitas/holder/narasi/VWAP/
+    # Jupiter) jadi 1-2 kalimat gambaran besar -- PURE TEKS, tak pengaruhi
+    # skor apa pun (biar AI tak cuma nilai gaya PR media spt kasus $PUMPCADE,
+    # tapi kasih verdict holistik yg mencakup volume/komunitas/distribusi
+    # suplai juga -- lihat sources/ai_common.py).
+    # Coba Gemini dulu; kalau gagal/limit, fallback ke Groq (rate limit
+    # gratisnya lebih longgar). Degrade gracefully kalau keduanya gagal/key
+    # kosong -- skor narasi tetap rule-based biasa, tak ada thesis.
+    #
+    # Gate bukti minimum: kalau Reddit & News keduanya terlalu tipis, JANGAN
+    # panggil AI sama sekali -- lebih baik "tak menilai" drpd menilai keliru
+    # dari data hampir kosong (lihat config.AI_MIN_REDDIT_POSTS/NEWS_ARTICLES).
+    # Thesis butuh bukti kualitatif nyata soal narasi juga, bukan cuma angka
+    # metrik lain -- jadi gate yang sama berlaku utk thesis, bukan cuma
+    # authenticity.
+    reddit_cnt = nar.get("reddit", {}).get("post_count", 0)
+    news_cnt = nar.get("news", {}).get("article_count", 0)
+    has_enough_evidence = (
+        reddit_cnt >= config.AI_MIN_REDDIT_POSTS or news_cnt >= config.AI_MIN_NEWS_ARTICLES
+    )
+
+    nar_ai = {}
+    if has_enough_evidence:
+        nar_ai = gemini.assess_narrative(symbol, nar.get("category", "unknown"), nar, lp, vol, hold, vwap, jup)
+        if not nar_ai.get("available"):
+            nar_ai = groq.assess_narrative(symbol, nar.get("category", "unknown"), nar, lp, vol, hold, vwap, jup)
+    else:
+        log.info(
+            "$%s: bukti narasi terlalu tipis (reddit=%d, news=%d) -- skip AI check",
+            symbol, reddit_cnt, news_cnt,
+        )
+    if nar_ai.get("available"):
+        nar["score"] = round(nar.get("score", 0.0) * nar_ai["score_multiplier"], 3)
+    nar["ai"] = nar_ai
 
     # ---- SCORING & VERDICT ----
     scored = scoring.compute(lp, vol, hold, nar, warnings, vwap, lc, jup)

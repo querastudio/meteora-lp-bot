@@ -1,20 +1,28 @@
 """
-sources/gemini.py — Sintesis narasi via Gemini API gratis (Google AI Studio).
+sources/gemini.py — Sintesis AI via Gemini API gratis (Google AI Studio).
 
-HANYA dipakai untuk memperhalus interpretasi teks kualitatif narasi (post
-Reddit/artikel News yang sudah lolos filter _looks_crypto_related di
-narrative.py) -- BUKAN untuk Stage keamanan/hard-gate mana pun. Filosofi:
-gate rug/kontrak/holder harus tetap deterministik & auditable; LLM cuma
-menambah "rasa" pada bagian yang memang sudah soft-score (narasi).
+Dua bagian (lihat sources/ai_common.py utk detail lengkap):
+  1. authenticity -- HANYA dari teks kualitatif narasi (post Reddit/artikel
+     News yang sudah lolos filter _looks_crypto_related di narrative.py).
+     Tetap memengaruhi skor narasi (multiplier 0.6-1.0), BUKAN utk Stage
+     keamanan/hard-gate mana pun. Filosofi: gate rug/kontrak/holder harus
+     tetap deterministik & auditable; LLM cuma menambah "rasa" pada bagian
+     yang memang sudah soft-score (narasi).
+  2. thesis -- sintesis SEMUA metrik (LP/volatilitas/holder/narasi/VWAP/
+     Jupiter) jadi 1-2 kalimat "gambaran besar". PURE TEKS, TIDAK menyentuh
+     skor sama sekali -- murni buat dibaca user di notifikasi.
 
 Kenapa aman dari prompt-injection:
   - Teks Reddit/News (konten publik TAK TEPERCAYA) dikirim ke model murni
     sbg DATA yang dikutip (diberi label eksplisit "KUTIPAN EKSTERNAL"),
-    bukan sbg instruksi.
+    bukan sbg instruksi. Metrik lain (fee/TVL, holder, dst) adalah ANGKA
+    hasil hitungan kita sendiri -- bukan teks eksternal, aman dikirim tanpa
+    label khusus.
   - Output dipaksa JSON via response_schema (Gemini API) dgn enum terbatas
     -> kalaupun model "dibujuk" konten eksternal, hasil paling ekstrem cuma
     authenticity="organik" (skor tetap DIKALIKAN dlm rentang 0.6-1.0, bukan
-    additif) pada satu komponen soft-score narasi (bobot kecil dari total).
+    additif) pada satu komponen soft-score narasi (bobot kecil dari total),
+    dan field thesis cuma teks tampilan (tak ada jalur balik ke skor).
     Tak bisa memengaruhi Stage 1-4 (hard gate) sama sekali.
   - Gagal / respons tak valid -> degrade gracefully (available=False, tak
     ada penyesuaian skor) -> main.py akan coba sources/groq.py sbg fallback,
@@ -42,24 +50,35 @@ _RESPONSE_SCHEMA = {
             "type": "STRING",
             "enum": ["organik", "campuran", "terkoordinasi"],
         },
-        "summary": {"type": "STRING"},
+        "thesis": {"type": "STRING"},
     },
-    "required": ["authenticity", "summary"],
+    "required": ["authenticity", "thesis"],
 }
 
 
-def assess_narrative(symbol: str, category: str, nar: Dict[str, Any]) -> Dict[str, Any]:
+def assess_narrative(
+    symbol: str,
+    category: str,
+    nar: Dict[str, Any],
+    lp: Dict[str, Any],
+    vol: Dict[str, Any],
+    hold: Dict[str, Any],
+    vwap: Dict[str, Any],
+    jup: Dict[str, Any],
+) -> Dict[str, Any]:
     """
-    Return { available, authenticity, summary, score_multiplier }.
+    Return { available, authenticity, thesis, score_multiplier }.
     score_multiplier (0.6-1.0) dipakai KALIKAN nar['score'] yang sudah ada
-    (rule-based) -- bukan gantikan, cuma nudge terbatas.
+    (rule-based) -- bukan gantikan, cuma nudge terbatas. thesis PURE TEKS,
+    tak memengaruhi skor apa pun.
     """
     out = ai_common.empty_result()
     if not config.GEMINI_NARRATIVE_ENABLED or not config.GEMINI_API_KEY:
         return out
 
     evidence = ai_common.build_evidence_block(nar)
-    prompt = ai_common.build_prompt(symbol, category, evidence)
+    context = ai_common.build_context_block(lp, vol, hold, nar, vwap, jup)
+    prompt = ai_common.build_prompt(symbol, category, evidence, context)
 
     try:
         model = config.GEMINI_MODEL
