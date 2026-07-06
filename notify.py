@@ -281,12 +281,23 @@ def _gmgn_lines(gm: Dict[str, Any]) -> List[str]:
     tags = gm.get("holder_tags") or {}
 
     if sec.get("available"):
-        hp_emoji = "🔴" if sec.get("is_honeypot") else "✅"
-        os_label = sec.get("open_source") or "?"
+        # honeypot/open_source SERING None (GMGN blm sempat analisis token
+        # baru) -- tampilkan "n/a" apa adanya, JANGAN diasumsikan aman.
+        hp = sec.get("is_honeypot")
+        hp_txt = "🔴 YA" if hp is True else ("✅ tidak" if hp is False else "n/a")
+        os_ = sec.get("open_source")
+        os_txt = "✅ ya" if os_ is True else ("⚠️ tidak" if os_ is False else "n/a")
+        lp_locked = sec.get("lp_locked")
+        if lp_locked is True:
+            lock_txt = f"✅ {sec.get('lp_lock_pct',0):.0f}%"
+        elif lp_locked is False:
+            lock_txt = "❌ tidak terkunci"
+        else:
+            lock_txt = "n/a"
         lines.append(
-            f"─ GMGN Security: honeypot {hp_emoji} | source {html.escape(os_label)} | "
+            f"─ GMGN Security: honeypot {hp_txt} | source terbuka {os_txt} | "
             f"tax {sec.get('buy_tax',0)*100:.0f}%/{sec.get('sell_tax',0)*100:.0f}% | "
-            f"rug_ratio {sec.get('rug_ratio',0)*100:.0f}%"
+            f"LP-lock {lock_txt} <i>(cross-check GMGN)</i>"
         )
     if dev.get("available"):
         lines.append(f"─ GMGN Dev holding: {dev.get('dev_holding_pct',0):.1f}% supply")
