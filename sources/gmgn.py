@@ -103,6 +103,10 @@ def token_security(mint: str, chain: str = "sol") -> Dict[str, Any]:
         d = data[0] if isinstance(data, list) and data else data
         if not isinstance(d, dict):
             return out
+        # TEMPORARY: log raw response penuh spy field asli kelihatan (dugaan
+        # nama/tipe field dari docs meleset -- lihat open_source=0 di log
+        # produksi). Hapus/perkecil lagi setelah field dikonfirmasi.
+        log.info("GMGN token/security RAW utk mint %s...: %s", mint[:6], str(d)[:2000])
 
         is_honeypot = str(d.get("is_honeypot", "no")).strip().lower() == "yes"
         open_source = str(d.get("open_source", "")).strip().lower()
@@ -170,9 +174,11 @@ def dev_holding(mint: str, chain: str = "sol") -> Dict[str, Any]:
         if out["available"]:
             log.info("GMGN token/info OK utk mint %s...: dev_holding=%.1f%%", mint[:6], out["dev_holding_pct"])
         else:
+            # TEMPORARY: log semua NAMA FIELD (bukan cuma value terpotong)
+            # spy pasti kelihatan kandidat field dev-holding yang benar.
             log.info(
-                "GMGN token/info: field dev_holding tak ditemukan utk mint %s... (raw=%s)",
-                mint[:6], str(d)[:300],
+                "GMGN token/info: field dev_holding tak ditemukan utk mint %s... keys=%s raw=%s",
+                mint[:6], sorted(d.keys()), str(d)[:2000],
             )
     except Exception as e:  # noqa: BLE001
         log.info("GMGN token/info gagal utk mint %s...: %s (degrade)", mint[:6], e)
@@ -200,6 +206,15 @@ def top_holder_tags(mint: str, chain: str = "sol") -> Dict[str, Any]:
         )
         if not rows:
             return out
+
+        # TEMPORARY: log struktur holder pertama (nama field + raw) spy tag
+        # wallet asli kelihatan -- dugaan field "tags"/"wallet_tags" dkk blm
+        # terkonfirmasi (semua persentase selalu 0.0% di produksi).
+        if isinstance(rows[0], dict):
+            log.info(
+                "GMGN top_holders RAW (holder pertama) utk mint %s...: keys=%s raw=%s",
+                mint[:6], sorted(rows[0].keys()), str(rows[0])[:1200],
+            )
 
         smart = bundler = sniper = rat = 0.0
         for h in rows:
