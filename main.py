@@ -176,6 +176,7 @@ def _process_candidate(pool: Dict[str, Any], st: Dict[str, Any], sol_price: floa
     gm_sec = gmgn.token_security(mint)
     gm_dev = gmgn.dev_holding(mint)
     gm_holders = gmgn.top_holder_tags(mint)
+    gm_top100 = gmgn.top100_cluster_analysis(mint)
     warnings.extend(gm_sec.get("flags", []))
 
     # ---- Sintesis AI (opsional -- lihat sources/gemini.py & ai_common.py) ----
@@ -244,7 +245,7 @@ def _process_candidate(pool: Dict[str, Any], st: Dict[str, Any], sol_price: floa
         "vwap": vwap,
         "lunarcrush": lc,
         "jupiter": jup,
-        "gmgn": {"security": gm_sec, "dev_holding": gm_dev, "holder_tags": gm_holders},
+        "gmgn": {"security": gm_sec, "dev_holding": gm_dev, "holder_tags": gm_holders, "top100": gm_top100},
         "narrative": nar,
         "warnings": warnings,
         "links": links,
@@ -321,6 +322,7 @@ def analyze_by_mint(mint: str, st: Dict[str, Any], sol_price: float) -> bool:
     gm_sec = gmgn.token_security(mint)
     gm_dev = gmgn.dev_holding(mint)
     gm_holders = gmgn.top_holder_tags(mint)
+    gm_top100 = gmgn.top100_cluster_analysis(mint)
     warnings.extend(gm_sec.get("flags", []))
 
     reddit_cnt = nar.get("reddit", {}).get("post_count", 0)
@@ -363,7 +365,7 @@ def analyze_by_mint(mint: str, st: Dict[str, Any], sol_price: float) -> bool:
         "vwap": vwap,
         "lunarcrush": lc,
         "jupiter": jup,
-        "gmgn": {"security": gm_sec, "dev_holding": gm_dev, "holder_tags": gm_holders},
+        "gmgn": {"security": gm_sec, "dev_holding": gm_dev, "holder_tags": gm_holders, "top100": gm_top100},
         "narrative": nar,
         "warnings": warnings,
         "links": links,
