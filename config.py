@@ -202,6 +202,17 @@ LUNARCRUSH_ENABLED = _env_bool("LUNARCRUSH_ENABLED", True)
 # Stage 4/6. Lihat sources/jupiter.py.
 JUPITER_ORGANIC_ENABLED = _env_bool("JUPITER_ORGANIC_ENABLED", True)
 
+# --- GMGN OpenAPI (gratis, apply via https://gmgn.ai/ai) -- penguat due
+# diligence: token/security (honeypot/tax/rug_ratio, cross-check Helius),
+# token/info (dev holding %), market/token_top_holders (tag wallet
+# smart_degen/bundler/sniper/rat_trader -- funding-source tracing ASLI,
+# bukan proxy waktu spt cluster-detection kita di holders.py).
+# INFORMASIONAL SAJA (tampil di notif sbg konteks tambahan) -- BUKAN hard
+# gate baru (hard gate keamanan/holder tetap otoritatif dari Helius) dan
+# TIDAK menyentuh skor. Lihat sources/gmgn.py.
+GMGN_API_KEY = os.getenv("GMGN_API_KEY", "")
+GMGN_ENABLED = _env_bool("GMGN_ENABLED", True)
+
 
 # ---------------------------------------------------------------------------
 # SCORING ENGINE — BOBOT SOFT SCORE (total mencerminkan profil pasif-konservatif)

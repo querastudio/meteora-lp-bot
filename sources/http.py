@@ -62,6 +62,9 @@ _MIN_INTERVAL = {
     # rate-limit resmi yg kita pakai jadi aman lebih lambat.
     "lite-api.jup.ag": 0.5,
     "api.telegram.org": 0.3,
+    # GMGN OpenAPI (gratis) -- dokumentasi sebut ~20 req/detik sustained,
+    # jeda konservatif jauh di bawah itu.
+    "openapi.gmgn.ai": 0.2,
 }
 
 

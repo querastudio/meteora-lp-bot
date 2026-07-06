@@ -55,6 +55,17 @@ def build_sample_ctx() -> dict:
         "available": True, "organic_score": 78.0, "organic_label": "high",
         "organic_signal_score": 0.78,
     }
+    gmgn_data = {
+        "security": {
+            "available": True, "is_honeypot": False, "open_source": "yes",
+            "buy_tax": 0.0, "sell_tax": 0.0, "rug_ratio": 0.05, "flags": [],
+        },
+        "dev_holding": {"available": True, "dev_holding_pct": 3.2},
+        "holder_tags": {
+            "available": True, "smart_money_pct": 8.5, "bundler_pct": 2.1,
+            "sniper_pct": 1.0, "rat_trader_pct": 0.0, "holder_count": 100,
+        },
+    }
     narrative = {
         "category": "animal", "keyword": symbol, "score": 0.88,
         "viral_label": "🔥 SANGAT VIRAL", "durability_label": "TAHAN LAMA",
@@ -110,6 +121,7 @@ def build_sample_ctx() -> dict:
         "vwap": vwap,
         "lunarcrush": lunarcrush,
         "jupiter": jupiter_organic,
+        "gmgn": gmgn_data,
         "narrative": narrative,
         "warnings": warnings,
         "links": links,

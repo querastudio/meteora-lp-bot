@@ -25,7 +25,7 @@ import scoring
 import state as state_mod
 from screening import hard_filters, holders, lp_quality, volatility
 from sources import (
-    dexscreener, geckoterminal, gemini, groq, helius, jupiter, lunarcrush,
+    dexscreener, geckoterminal, gemini, gmgn, groq, helius, jupiter, lunarcrush,
     meteora, narrative, telegram_inbound,
 )
 
@@ -169,6 +169,15 @@ def _process_candidate(pool: Dict[str, Any], st: Dict[str, Any], sol_price: floa
     # ---- JUPITER ORGANIC SCORE (gratis) -- penguat deteksi wash-trading ----
     jup = jupiter.organic_score(mint)
 
+    # ---- GMGN (gratis) -- security cross-check, dev holding %, tag holder ----
+    # INFORMASIONAL SAJA (tampil di HARD GATES section notif) -- tak menyentuh
+    # skor/hard gate, hard gate keamanan/holder tetap otoritatif dari Helius.
+    # Lihat sources/gmgn.py.
+    gm_sec = gmgn.token_security(mint)
+    gm_dev = gmgn.dev_holding(mint)
+    gm_holders = gmgn.top_holder_tags(mint)
+    warnings.extend(gm_sec.get("flags", []))
+
     # ---- Sintesis AI (opsional -- lihat sources/gemini.py & ai_common.py) ----
     # authenticity: nudge nar['score'] dlm rentang 0.6-1.0x dari kutipan
     # Reddit/News SAJA, TIDAK pernah menyentuh hard gate.
@@ -235,6 +244,7 @@ def _process_candidate(pool: Dict[str, Any], st: Dict[str, Any], sol_price: floa
         "vwap": vwap,
         "lunarcrush": lc,
         "jupiter": jup,
+        "gmgn": {"security": gm_sec, "dev_holding": gm_dev, "holder_tags": gm_holders},
         "narrative": nar,
         "warnings": warnings,
         "links": links,
@@ -308,6 +318,11 @@ def analyze_by_mint(mint: str, st: Dict[str, Any], sol_price: float) -> bool:
     lc = lunarcrush.social_signal(symbol)
     jup = jupiter.organic_score(mint)
 
+    gm_sec = gmgn.token_security(mint)
+    gm_dev = gmgn.dev_holding(mint)
+    gm_holders = gmgn.top_holder_tags(mint)
+    warnings.extend(gm_sec.get("flags", []))
+
     reddit_cnt = nar.get("reddit", {}).get("post_count", 0)
     news_cnt = nar.get("news", {}).get("article_count", 0)
     has_enough_evidence = (
@@ -348,6 +363,7 @@ def analyze_by_mint(mint: str, st: Dict[str, Any], sol_price: float) -> bool:
         "vwap": vwap,
         "lunarcrush": lc,
         "jupiter": jup,
+        "gmgn": {"security": gm_sec, "dev_holding": gm_dev, "holder_tags": gm_holders},
         "narrative": nar,
         "warnings": warnings,
         "links": links,
