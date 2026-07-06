@@ -265,3 +265,88 @@ def top_holder_tags(mint: str, chain: str = "sol") -> Dict[str, Any]:
     except Exception as e:  # noqa: BLE001
         log.info("GMGN wallet_tags_stat gagal utk mint %s...: %s (degrade)", mint[:6], e)
     return out
+
+
+def top100_cluster_analysis(mint: str, chain: str = "sol") -> Dict[str, Any]:
+    """
+    Return { available, fresh_pct, fresh_count, is_new_pct, is_new_count,
+             suspicious_pct, suspicious_count, sample_count, coverage_pct }.
+
+    Fitur "Top 100 Holders Analysis" SUNGGUHAN spt skill resmi GMGN (beda
+    dari top_holder_tags() yg cuma count level-token dari wallet_tags_stat)
+    -- menjawab pertanyaan "kalau mayoritas top 100 fresh wallet/saldo
+    seragam kecil, itu indikasi cluster bundler/wash trading" dgn agregasi
+    % SUPPLY (bukan cuma jumlah wallet) per sinyal, dari /v1/market/
+    token_top_holders (top 100 baris asli, per-wallet).
+
+    Eksperimen SEBELUMNYA (top_holder_tags() versi awal) nyoba field
+    'tags' tapi cuma sample 3 HOLDER TERBESAR per token -- semua kosong,
+    disimpulkan "field tak berguna". Itu BIAS SAMPLING: holder terbesar
+    biasanya pool/whale lama, BUKAN representatif tail top-100 tempat
+    fresh-wallet farm biasanya nyebar. Log live sebelumnya SEMPAT kasih
+    lihat holder non-top-3 di $Jotchua punya tags=['fresh_wallet'] --
+    jadi field 'tags' KEMUNGKINAN valid, cuma perlu di-scan SEMUA 100
+    baris, bukan cuma 3 teratas.
+
+    is_new/is_suspicious (boolean eksplisit per wallet dari GMGN) dipakai
+    sbg sinyal utama krn namanya tak ambigu; 'fresh_wallet' dari tags jadi
+    sinyal pelengkap. TEMPORARY: log distribusi tag lengkap (semua 100
+    baris) skalian, spy vocabulary tag lain (mis. "bundler") bisa
+    dikonfirmasi/ditambahkan dari data nyata di run berikutnya.
+    """
+    out = {
+        "available": False, "fresh_pct": 0.0, "fresh_count": 0,
+        "is_new_pct": 0.0, "is_new_count": 0,
+        "suspicious_pct": 0.0, "suspicious_count": 0,
+        "sample_count": 0, "coverage_pct": 0.0,
+    }
+    try:
+        data = _get("/v1/market/token_top_holders", {"chain": chain, "address": mint, "limit": 100})
+        if not data:
+            return out
+        rows = data if isinstance(data, list) else (
+            data.get("list") or data.get("holders") or data.get("data") or []
+        )
+        if not rows:
+            return out
+
+        tag_counter: Dict[str, int] = {}
+        fresh_pct = new_pct = susp_pct = coverage = 0.0
+        fresh_n = new_n = susp_n = 0
+        for h in rows:
+            if not isinstance(h, dict):
+                continue
+            pct = float(h.get("amount_percentage", 0) or 0) * 100.0
+            coverage += pct
+            tags = {str(t).strip().lower() for t in (h.get("tags") or [])}
+            for t in tags:
+                tag_counter[t] = tag_counter.get(t, 0) + 1
+            if "fresh_wallet" in tags:
+                fresh_pct += pct
+                fresh_n += 1
+            if h.get("is_new") is True:
+                new_pct += pct
+                new_n += 1
+            if h.get("is_suspicious") is True:
+                susp_pct += pct
+                susp_n += 1
+
+        out.update({
+            "available": True,
+            "fresh_pct": round(fresh_pct, 1), "fresh_count": fresh_n,
+            "is_new_pct": round(new_pct, 1), "is_new_count": new_n,
+            "suspicious_pct": round(susp_pct, 1), "suspicious_count": susp_n,
+            "sample_count": len(rows), "coverage_pct": round(coverage, 1),
+        })
+        log.info(
+            "GMGN top100 tag distribution (semua %d baris) utk mint %s...: %s",
+            len(rows), mint[:6], tag_counter,
+        )
+        log.info(
+            "GMGN top100_cluster_analysis OK utk mint %s...: fresh_wallet_tag=%.1f%% (%d) "
+            "is_new=%.1f%% (%d) is_suspicious=%.1f%% (%d) dari %d holder (coverage %.1f%% supply)",
+            mint[:6], fresh_pct, fresh_n, new_pct, new_n, susp_pct, susp_n, len(rows), coverage,
+        )
+    except Exception as e:  # noqa: BLE001
+        log.info("GMGN top100_cluster_analysis gagal utk mint %s...: %s (degrade)", mint[:6], e)
+    return out
