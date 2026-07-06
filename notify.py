@@ -300,13 +300,16 @@ def _gmgn_lines(gm: Dict[str, Any]) -> List[str]:
             f"LP-lock {lock_txt} <i>(cross-check GMGN)</i>"
         )
     if dev.get("available"):
-        lines.append(f"─ GMGN Dev holding: {dev.get('dev_holding_pct',0):.1f}% supply")
+        status = dev.get("dev_status") or ""
+        status_txt = f" ({html.escape(status)})" if status else ""
+        lines.append(f"─ GMGN Dev holding: {dev.get('dev_holding_pct',0):.2f}% supply{status_txt}")
     if tags.get("available"):
         lines.append(
-            f"─ GMGN Top holder tags: smart money {tags.get('smart_money_pct',0):.1f}% | "
-            f"bundler {tags.get('bundler_pct',0):.1f}% | sniper {tags.get('sniper_pct',0):.1f}% | "
-            f"rat_trader {tags.get('rat_trader_pct',0):.1f}% "
-            f"<i>(funding-source tracing GMGN, bukan proxy waktu)</i>"
+            f"─ GMGN wallet tags (dari {tags.get('holder_count',0)} holder): "
+            f"smart money {tags.get('smart_money_count',0)} | renowned {tags.get('renowned_count',0)} | "
+            f"sniper {tags.get('sniper_count',0)} | rat_trader {tags.get('rat_trader_count',0)} | "
+            f"whale {tags.get('whale_count',0)} "
+            f"<i>(jumlah wallet, bukan % supply -- funding-source tracing GMGN)</i>"
         )
     return lines
 

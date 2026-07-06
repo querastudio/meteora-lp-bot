@@ -1,10 +1,10 @@
 """
-sources/gmgn.py — GMGN OpenAPI: keamanan token, dev holding %, dan tag wallet
-(smart money/bundler/sniper/rat_trader) di top holder -- PELENGKAP due
-diligence Stage 3/4 kita sendiri (Helius + heuristik cluster-waktu),
-BUKAN pengganti. GMGN nge-tag wallet dari funding-source tracing ASLI
-(mereka trace siapa danai wallet), bukan proxy waktu-pembuatan spt punya
-kita -- lihat catatan keterbatasan di screening/holders.py.
+sources/gmgn.py — GMGN OpenAPI: keamanan token, dev holding %, dan count wallet
+smart money/sniper/rat_trader/renowned/whale -- PELENGKAP due diligence
+Stage 3/4 kita sendiri (Helius + heuristik cluster-waktu), BUKAN pengganti.
+GMGN nge-tag wallet dari funding-source tracing ASLI (mereka trace siapa
+danai wallet), bukan proxy waktu-pembuatan spt punya kita -- lihat catatan
+keterbatasan di screening/holders.py.
 
 API GRATIS -- diverifikasi langsung: apply cukup submit public key Ed25519
 sekali via https://gmgn.ai/ai, langsung dapat API key tanpa prompt bayar
@@ -27,10 +27,11 @@ dikoreksi berdasarkan log respons LIVE, bukan lagi dugaan dari docs:
     renounced_freeze_account, buy_tax/sell_tax/top_10_holder_rate, plus
     lock_summary (LP-lock/burn, tak disebut docs sama sekali) -- lihat
     docstring token_security().
-  - token/info (dev holding %) & market/token_top_holders (tag wallet):
-    parsing masih DEFENSIF (coba beberapa nama field kandidat), degrade
-    ke available=False + log field/nilai relevan kalau tak ketemu, supaya
-    bisa diverifikasi/diperbaiki dari log run nyata tanpa nebak buta.
+  - token/info: dev holding % dihitung dari dev.creator_token_balance /
+    circulating_supply (field 'dev' berisi objek creator, bukan % langsung
+    -- lihat docstring dev_holding()); count wallet smart/sniper/rat/
+    renowned/whale dari wallet_tags_stat (lihat docstring top_holder_tags()
+    utk kenapa market/token_top_holders per-baris TAK dipakai lagi).
 
 INFORMASIONAL SAJA: hasil di sini tampil sbg konteks tambahan di notifikasi
 (HARD GATES section), TIDAK PERNAH jadi hard gate baru atau menyentuh skor
@@ -50,11 +51,6 @@ from sources import http
 log = logging.getLogger("gmgn")
 
 BASE = "https://openapi.gmgn.ai"
-
-_SMART_TAGS = {"smart_degen", "renowned", "smart_money", "smart_wallet"}
-_BUNDLER_TAGS = {"bundler"}
-_SNIPER_TAGS = {"sniper"}
-_RAT_TAGS = {"rat_trader"}
 
 
 def _auth_params(extra: Dict[str, Any]) -> Dict[str, Any]:
@@ -171,13 +167,21 @@ def token_security(mint: str, chain: str = "sol") -> Dict[str, Any]:
 
 def dev_holding(mint: str, chain: str = "sol") -> Dict[str, Any]:
     """
-    Return { available, dev_holding_pct }. Nama field API belum dikonfirmasi
-    resmi (GMGN tak kasih contoh JSON) -- coba beberapa kandidat nama field
-    umum; kalau tak ketemu, degrade ke available=False + log raw respons
-    (dipotong) supaya bisa diverifikasi dari log run nyata.
+    Return { available, dev_holding_pct, dev_status }.
+
+    DIKONFIRMASI dari live log (6 Juli 2026): token/info TAK punya field %
+    langsung -- field 'dev' berisi OBJEK info creator (creator_address,
+    creator_token_balance, creator_token_status spt "creator_close"), bukan
+    salah satu dari kandidat lama (dev_holding_rate/dev_holding_percentage/
+    dst -- semua itu TAK ADA di respons nyata). dev_holding_pct dihitung
+    manual: creator_token_balance / circulating_supply.
+
+    Di 3 sampel live (ZERO/Jotchua/PUMPCADE) creator_token_status selalu
+    "creator_close" & balance "0" -- dev sudah keluar total, ini SINYAL ASLI
+    (bukan bug/field kosong), makanya dev_status ikut ditampilkan biar jelas
+    "0%" itu artinya "sudah cair", bukan "data kosong".
     """
-    out = {"available": False, "dev_holding_pct": 0.0}
-    candidates = ("dev_holding_rate", "dev_holding_percentage", "creator_holding_rate", "dev_holding")
+    out = {"available": False, "dev_holding_pct": 0.0, "dev_status": ""}
     try:
         data = _get("/v1/token/info", {"chain": chain, "address": mint})
         if not data:
@@ -186,105 +190,78 @@ def dev_holding(mint: str, chain: str = "sol") -> Dict[str, Any]:
         if not isinstance(d, dict):
             return out
 
-        for key in candidates:
-            if key in d and d[key] is not None:
-                val = float(d[key])
-                out["dev_holding_pct"] = round(val * 100.0 if val <= 1.0 else val, 1)
-                out["available"] = True
-                break
-
-        # TEMPORARY: keys() run sebelumnya konfirmasi field 'dev' &
-        # 'wallet_tags_stat' ADA di respons, tapi nilainya blm sempat
-        # kelihatan (raw dump lama kepotong sebelum sampai situ secara
-        # insertion-order). Log NILAI keduanya langsung (bukan dump seluruh
-        # dict) spy pasti kelihatan tanpa terpotong.
-        log.info(
-            "GMGN token/info dev/wallet_tags_stat utk mint %s...: dev=%s wallet_tags_stat=%s",
-            mint[:6], d.get("dev"), d.get("wallet_tags_stat"),
-        )
+        dev = d.get("dev")
+        circ = float(d.get("circulating_supply", 0) or 0)
+        if isinstance(dev, dict) and circ > 0:
+            bal = float(dev.get("creator_token_balance", 0) or 0)
+            out["dev_holding_pct"] = round(bal / circ * 100.0, 2)
+            out["dev_status"] = str(dev.get("creator_token_status") or "")
+            out["available"] = True
 
         if out["available"]:
-            log.info("GMGN token/info OK utk mint %s...: dev_holding=%.1f%%", mint[:6], out["dev_holding_pct"])
+            log.info(
+                "GMGN dev_holding OK utk mint %s...: %.2f%% status=%s",
+                mint[:6], out["dev_holding_pct"], out["dev_status"],
+            )
         else:
-            log.info("GMGN token/info: field dev_holding (kandidat lama) tak ditemukan utk mint %s...", mint[:6])
+            log.info("GMGN dev_holding: field 'dev'/circulating_supply tak lengkap utk mint %s...", mint[:6])
     except Exception as e:  # noqa: BLE001
-        log.info("GMGN token/info gagal utk mint %s...: %s (degrade)", mint[:6], e)
+        log.info("GMGN dev_holding gagal utk mint %s...: %s (degrade)", mint[:6], e)
     return out
 
 
 def top_holder_tags(mint: str, chain: str = "sol") -> Dict[str, Any]:
     """
-    Return { available, smart_money_pct, bundler_pct, sniper_pct,
-             rat_trader_pct, holder_count }. Agregasi % supply top-100
-    holder per kategori tag wallet GMGN (funding-source tracing asli).
-    Skema field belum dikonfirmasi resmi -- parsing defensif + log raw
-    kalau baris holder tak punya struktur yg diharapkan.
+    Return { available, smart_money_count, sniper_count, rat_trader_count,
+             renowned_count, whale_count, holder_count }.
+
+    DIKOREKSI TOTAL dari desain awal. Desain awal menyisir baris per-holder
+    dari /v1/market/token_top_holders (field tags/maker_token_tags/
+    wallet_tag_v2) mencari kategori smart_degen/bundler/sniper/rat_trader --
+    TERNYATA field itu TAK PERNAH berisi kategori itu di 3 sampel live:
+    wallet_tag_v2 cuma label ranking ("TOP1"/"TOP2"), maker_token_tags cuma
+    peran on-chain ("top_holder"/"transfer_in"), tags cuma nama platform
+    trading ("bullx"/"padre") atau "fresh_wallet". Kategori yg kita cari
+    justru ada di 'wallet_tags_stat' pada /v1/token/info (endpoint SAMA
+    dgn dev_holding()) -- tapi berupa COUNT wallet per kategori, bukan %
+    supply (GMGN tak expose breakdown % per kategori scr langsung).
+
+    'bundler_wallets' & 'fresh_wallets' SENGAJA TAK dipakai/ditampilkan --
+    di ke-3 sampel live (3 token beda, tanpa hubungan) keduanya PERSIS 1000,
+    indikasi kuat itu cuma nilai cap/placeholder API, bukan hitungan asli.
+    smart/renowned/sniper/rat/whale bervariasi wajar antar token jadi
+    dianggap sinyal asli.
     """
     out = {
-        "available": False, "smart_money_pct": 0.0, "bundler_pct": 0.0,
-        "sniper_pct": 0.0, "rat_trader_pct": 0.0, "holder_count": 0,
+        "available": False, "smart_money_count": 0, "sniper_count": 0,
+        "rat_trader_count": 0, "renowned_count": 0, "whale_count": 0,
+        "holder_count": 0,
     }
     try:
-        data = _get("/v1/market/token_top_holders", {"chain": chain, "address": mint, "limit": 100})
+        data = _get("/v1/token/info", {"chain": chain, "address": mint})
         if not data:
             return out
-        rows = data if isinstance(data, list) else (
-            data.get("list") or data.get("holders") or data.get("data") or []
-        )
-        if not rows:
+        d = data[0] if isinstance(data, list) and data else data
+        if not isinstance(d, dict):
+            return out
+        stat = d.get("wallet_tags_stat")
+        if not isinstance(stat, dict):
             return out
 
-        # Field % supply DIKONFIRMASI dari live run: "amount_percentage"
-        # (rasio 0-1) -- bukan salah satu kandidat lama (rate/percentage/
-        # pct/share), itulah kenapa semua kategori selalu 0.0% sebelumnya
-        # (pct selalu jatuh ke default 0 utk SEMUA holder).
-        #
-        # TEMPORARY: log field tag 3 holder pertama (nilai asli, bukan cuma
-        # nama key) -- keys() run sebelumnya kasih 3 kandidat (tags,
-        # maker_token_tags, wallet_tag_v2) tapi baru wallet_tag_v2 yg
-        # kelihatan isinya ("TOP1", bukan smart_degen/bundler/dst -- sepertinya
-        # cuma label ranking, bukan tag yg kita cari).
-        for i, h in enumerate(rows[:3]):
-            if isinstance(h, dict):
-                log.info(
-                    "GMGN top_holders tag-fields (holder #%d) utk mint %s...: "
-                    "tags=%s maker_token_tags=%s wallet_tag_v2=%s is_suspicious=%s is_new=%s",
-                    i, mint[:6], h.get("tags"), h.get("maker_token_tags"),
-                    h.get("wallet_tag_v2"), h.get("is_suspicious"), h.get("is_new"),
-                )
-
-        smart = bundler = sniper = rat = 0.0
-        for h in rows:
-            if not isinstance(h, dict):
-                continue
-            pct = float(
-                h.get("amount_percentage") or h.get("rate") or h.get("percentage")
-                or h.get("pct") or h.get("share") or 0
-            )
-            if pct <= 1.0:
-                pct *= 100.0
-            tags = h.get("tags") or h.get("maker_token_tags") or h.get("wallet_tags") or h.get("tag_list") or []
-            if isinstance(tags, str):
-                tags = [tags]
-            tagset = {str(t).strip().lower() for t in tags}
-            if tagset & _SMART_TAGS:
-                smart += pct
-            if tagset & _BUNDLER_TAGS:
-                bundler += pct
-            if tagset & _SNIPER_TAGS:
-                sniper += pct
-            if tagset & _RAT_TAGS:
-                rat += pct
-
         out.update({
-            "available": True, "smart_money_pct": round(smart, 1), "bundler_pct": round(bundler, 1),
-            "sniper_pct": round(sniper, 1), "rat_trader_pct": round(rat, 1),
-            "holder_count": len(rows),
+            "available": True,
+            "smart_money_count": int(stat.get("smart_wallets", 0) or 0),
+            "sniper_count": int(stat.get("sniper_wallets", 0) or 0),
+            "rat_trader_count": int(stat.get("rat_trader_wallets", 0) or 0),
+            "renowned_count": int(stat.get("renowned_wallets", 0) or 0),
+            "whale_count": int(stat.get("whale_wallets", 0) or 0),
+            "holder_count": int(d.get("holder_count", 0) or 0),
         })
         log.info(
-            "GMGN top_holders OK utk mint %s...: smart=%.1f%% bundler=%.1f%% sniper=%.1f%% rat=%.1f%% (n=%d)",
-            mint[:6], smart, bundler, sniper, rat, len(rows),
+            "GMGN wallet_tags_stat OK utk mint %s...: smart=%d renowned=%d sniper=%d rat=%d whale=%d (holder_count=%d)",
+            mint[:6], out["smart_money_count"], out["renowned_count"], out["sniper_count"],
+            out["rat_trader_count"], out["whale_count"], out["holder_count"],
         )
     except Exception as e:  # noqa: BLE001
-        log.info("GMGN top_holders gagal utk mint %s...: %s (degrade)", mint[:6], e)
+        log.info("GMGN wallet_tags_stat gagal utk mint %s...: %s (degrade)", mint[:6], e)
     return out
