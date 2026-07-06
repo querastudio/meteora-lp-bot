@@ -18,17 +18,19 @@ src/client/OpenApiClient.ts & signer.ts di github.com/GMGNAI/gmgn-skills
 utk sumber detail auth ini.
 
 Skema field respons BELUM 100% terdokumentasi resmi (GMGN tak kasih contoh
-JSON mentah di docs publik):
-  - token/security: field & threshold dikonfirmasi dari
-    docs/workflow-token-due-diligence.md resmi mereka (is_honeypot,
-    open_source, owner_renounced, renounced_mint, renounced_freeze_account,
-    buy_tax/sell_tax, top_10_holder_rate, rug_ratio, sniper_count) --
-    cukup yakin.
+JSON mentah di docs publik), dan docs resmi mereka TERBUKTI MELESET dari API
+sungguhan (docs/workflow-token-due-diligence.md sebut rug_ratio/sniper_count/
+owner_renounced yg TAK ADA di respons nyata) -- semua field di bawah sudah
+dikoreksi berdasarkan log respons LIVE, bukan lagi dugaan dari docs:
+  - token/security: is_honeypot/is_open_source (tri-state, sering None =
+    belum dianalisis GMGN, BUKAN "aman"), renounced_mint/
+    renounced_freeze_account, buy_tax/sell_tax/top_10_holder_rate, plus
+    lock_summary (LP-lock/burn, tak disebut docs sama sekali) -- lihat
+    docstring token_security().
   - token/info (dev holding %) & market/token_top_holders (tag wallet):
-    TIDAK ada contoh JSON resmi -- parsing di bawah DEFENSIF (coba
-    beberapa nama field umum), degrade ke available=False + log raw
-    respons kalau tak ketemu, supaya bisa diverifikasi/diperbaiki dari
-    log run nyata tanpa nebak buta.
+    parsing masih DEFENSIF (coba beberapa nama field kandidat), degrade
+    ke available=False + log field/nilai relevan kalau tak ketemu, supaya
+    bisa diverifikasi/diperbaiki dari log run nyata tanpa nebak buta.
 
 INFORMASIONAL SAJA: hasil di sini tampil sbg konteks tambahan di notifikasi
 (HARD GATES section), TIDAK PERNAH jadi hard gate baru atau menyentuh skor
@@ -83,18 +85,40 @@ def _get(subpath: str, params: Dict[str, Any]) -> Optional[Any]:
     return resp
 
 
+def _tri_bool(v: Any) -> Optional[bool]:
+    """None kalau field memang null (GMGN blm sempat analisis), else bool asli."""
+    return None if v is None else bool(v)
+
+
 def token_security(mint: str, chain: str = "sol") -> Dict[str, Any]:
     """
-    Return { available, is_honeypot, open_source, owner_renounced,
-             renounced_mint, renounced_freeze, buy_tax, sell_tax,
-             top10_holder_rate, rug_ratio, sniper_count, flags }.
-    flags = peringatan siap-pakai (digabung ke `warnings` main.py).
+    Return { available, is_honeypot, open_source, renounced_mint,
+             renounced_freeze, buy_tax, sell_tax, top10_holder_rate,
+             lp_locked, lp_lock_pct, flags }.
+
+    Field DIKONFIRMASI dari respons LIVE /v1/token/security (BUKAN dari
+    docs resmi GMGN yg ternyata skemanya beda dari API sungguhan --
+    docs/workflow-token-due-diligence.md sebut field rug_ratio/
+    sniper_count/owner_renounced yg TAK ADA sama sekali di respons nyata;
+    sebaliknya ada lock_summary (info lock/burn LP) yg tak disebut docs
+    sama sekali -- verified 6 Juli 2026 via live run).
+
+    is_honeypot/open_source SERING None (bukan True/False) -- GMGN belum
+    selalu menganalisis token baru utk pengecekan ini. None ditampilkan
+    apa adanya sbg "n/a" di notif, TIDAK diasumsikan aman (beda dari
+    asumsi awal yg salah menganggap None -> False/"aman").
+
+    lp_locked/lp_lock_pct dari lock_summary -- BONUS tak terduga: bisa isi
+    celah "LP-lock belum terverifikasi otomatis" yg selama ini jadi
+    warning tetap di tiap notifikasi (lihat hard_filters.py). Belum
+    dipakai gantikan warning itu -- cuma ditampilkan sbg info tambahan
+    dulu, nunggu diskusi lanjut sebelum ubah logic warning yg sudah ada.
     """
     out = {
-        "available": False, "is_honeypot": False, "open_source": "",
-        "owner_renounced": None, "renounced_mint": None, "renounced_freeze": None,
+        "available": False, "is_honeypot": None, "open_source": None,
+        "renounced_mint": None, "renounced_freeze": None,
         "buy_tax": 0.0, "sell_tax": 0.0, "top10_holder_rate": 0.0,
-        "rug_ratio": 0.0, "sniper_count": 0, "flags": [],
+        "lp_locked": None, "lp_lock_pct": 0.0, "flags": [],
     }
     try:
         data = _get("/v1/token/security", {"chain": chain, "address": mint})
@@ -103,44 +127,42 @@ def token_security(mint: str, chain: str = "sol") -> Dict[str, Any]:
         d = data[0] if isinstance(data, list) and data else data
         if not isinstance(d, dict):
             return out
-        # TEMPORARY: log raw response penuh spy field asli kelihatan (dugaan
-        # nama/tipe field dari docs meleset -- lihat open_source=0 di log
-        # produksi). Hapus/perkecil lagi setelah field dikonfirmasi.
-        log.info("GMGN token/security RAW utk mint %s...: %s", mint[:6], str(d)[:2000])
 
-        is_honeypot = str(d.get("is_honeypot", "no")).strip().lower() == "yes"
-        open_source = str(d.get("open_source", "")).strip().lower()
-        owner_renounced = str(d.get("owner_renounced", "")).strip().lower() == "yes"
-        renounced_mint = bool(d.get("renounced_mint", False))
-        renounced_freeze = bool(d.get("renounced_freeze_account", False))
+        is_honeypot = _tri_bool(d.get("is_honeypot"))
+        open_source = _tri_bool(d.get("is_open_source"))
+        renounced_mint = _tri_bool(d.get("renounced_mint"))
+        renounced_freeze = _tri_bool(d.get("renounced_freeze_account"))
         buy_tax = float(d.get("buy_tax", 0) or 0)
         sell_tax = float(d.get("sell_tax", 0) or 0)
         top10 = float(d.get("top_10_holder_rate", 0) or 0)
-        rug_ratio = float(d.get("rug_ratio", 0) or 0)
-        sniper_count = int(d.get("sniper_count", 0) or 0)
+
+        lock = d.get("lock_summary") or {}
+        lp_locked = _tri_bool(lock.get("is_locked"))
+        lock_detail = lock.get("lock_detail") or []
+        lp_lock_pct = (
+            sum(float(x.get("percent", 0) or 0) for x in lock_detail if isinstance(x, dict))
+            if isinstance(lock_detail, list) else 0.0
+        )
 
         flags: List[str] = []
         if is_honeypot:
             flags.append("GMGN: terdeteksi HONEYPOT")
-        if open_source == "unknown":
+        if open_source is False:
             flags.append("GMGN: source code belum terverifikasi")
         if buy_tax > 0.10 or sell_tax > 0.10:
             flags.append(f"GMGN: tax tinggi (buy {buy_tax*100:.0f}% / sell {sell_tax*100:.0f}%)")
-        if rug_ratio > 0.30:
-            flags.append(f"GMGN: rug_ratio tinggi ({rug_ratio*100:.0f}%)")
-        if sniper_count > 20:
-            flags.append(f"GMGN: sniper count tinggi ({sniper_count})")
 
         out.update({
             "available": True, "is_honeypot": is_honeypot, "open_source": open_source,
-            "owner_renounced": owner_renounced, "renounced_mint": renounced_mint,
-            "renounced_freeze": renounced_freeze, "buy_tax": buy_tax, "sell_tax": sell_tax,
-            "top10_holder_rate": round(top10, 3), "rug_ratio": round(rug_ratio, 3),
-            "sniper_count": sniper_count, "flags": flags,
+            "renounced_mint": renounced_mint, "renounced_freeze": renounced_freeze,
+            "buy_tax": buy_tax, "sell_tax": sell_tax, "top10_holder_rate": round(top10, 3),
+            "lp_locked": lp_locked, "lp_lock_pct": round(lp_lock_pct * 100.0, 1),
+            "flags": flags,
         })
         log.info(
-            "GMGN token/security OK utk mint %s...: honeypot=%s open_source=%s rug_ratio=%.2f",
-            mint[:6], is_honeypot, open_source, rug_ratio,
+            "GMGN token/security OK utk mint %s...: honeypot=%s open_source=%s "
+            "lp_locked=%s (%.1f%%) top10=%.1f%%",
+            mint[:6], is_honeypot, open_source, lp_locked, out["lp_lock_pct"], top10 * 100,
         )
     except Exception as e:  # noqa: BLE001
         log.info("GMGN token/security gagal utk mint %s...: %s (degrade)", mint[:6], e)
@@ -171,15 +193,20 @@ def dev_holding(mint: str, chain: str = "sol") -> Dict[str, Any]:
                 out["available"] = True
                 break
 
+        # TEMPORARY: keys() run sebelumnya konfirmasi field 'dev' &
+        # 'wallet_tags_stat' ADA di respons, tapi nilainya blm sempat
+        # kelihatan (raw dump lama kepotong sebelum sampai situ secara
+        # insertion-order). Log NILAI keduanya langsung (bukan dump seluruh
+        # dict) spy pasti kelihatan tanpa terpotong.
+        log.info(
+            "GMGN token/info dev/wallet_tags_stat utk mint %s...: dev=%s wallet_tags_stat=%s",
+            mint[:6], d.get("dev"), d.get("wallet_tags_stat"),
+        )
+
         if out["available"]:
             log.info("GMGN token/info OK utk mint %s...: dev_holding=%.1f%%", mint[:6], out["dev_holding_pct"])
         else:
-            # TEMPORARY: log semua NAMA FIELD (bukan cuma value terpotong)
-            # spy pasti kelihatan kandidat field dev-holding yang benar.
-            log.info(
-                "GMGN token/info: field dev_holding tak ditemukan utk mint %s... keys=%s raw=%s",
-                mint[:6], sorted(d.keys()), str(d)[:2000],
-            )
+            log.info("GMGN token/info: field dev_holding (kandidat lama) tak ditemukan utk mint %s...", mint[:6])
     except Exception as e:  # noqa: BLE001
         log.info("GMGN token/info gagal utk mint %s...: %s (degrade)", mint[:6], e)
     return out
@@ -207,23 +234,36 @@ def top_holder_tags(mint: str, chain: str = "sol") -> Dict[str, Any]:
         if not rows:
             return out
 
-        # TEMPORARY: log struktur holder pertama (nama field + raw) spy tag
-        # wallet asli kelihatan -- dugaan field "tags"/"wallet_tags" dkk blm
-        # terkonfirmasi (semua persentase selalu 0.0% di produksi).
-        if isinstance(rows[0], dict):
-            log.info(
-                "GMGN top_holders RAW (holder pertama) utk mint %s...: keys=%s raw=%s",
-                mint[:6], sorted(rows[0].keys()), str(rows[0])[:1200],
-            )
+        # Field % supply DIKONFIRMASI dari live run: "amount_percentage"
+        # (rasio 0-1) -- bukan salah satu kandidat lama (rate/percentage/
+        # pct/share), itulah kenapa semua kategori selalu 0.0% sebelumnya
+        # (pct selalu jatuh ke default 0 utk SEMUA holder).
+        #
+        # TEMPORARY: log field tag 3 holder pertama (nilai asli, bukan cuma
+        # nama key) -- keys() run sebelumnya kasih 3 kandidat (tags,
+        # maker_token_tags, wallet_tag_v2) tapi baru wallet_tag_v2 yg
+        # kelihatan isinya ("TOP1", bukan smart_degen/bundler/dst -- sepertinya
+        # cuma label ranking, bukan tag yg kita cari).
+        for i, h in enumerate(rows[:3]):
+            if isinstance(h, dict):
+                log.info(
+                    "GMGN top_holders tag-fields (holder #%d) utk mint %s...: "
+                    "tags=%s maker_token_tags=%s wallet_tag_v2=%s is_suspicious=%s is_new=%s",
+                    i, mint[:6], h.get("tags"), h.get("maker_token_tags"),
+                    h.get("wallet_tag_v2"), h.get("is_suspicious"), h.get("is_new"),
+                )
 
         smart = bundler = sniper = rat = 0.0
         for h in rows:
             if not isinstance(h, dict):
                 continue
-            pct = float(h.get("rate") or h.get("percentage") or h.get("pct") or h.get("share") or 0)
+            pct = float(
+                h.get("amount_percentage") or h.get("rate") or h.get("percentage")
+                or h.get("pct") or h.get("share") or 0
+            )
             if pct <= 1.0:
                 pct *= 100.0
-            tags = h.get("tags") or h.get("wallet_tags") or h.get("tag_list") or h.get("tag") or []
+            tags = h.get("tags") or h.get("maker_token_tags") or h.get("wallet_tags") or h.get("tag_list") or []
             if isinstance(tags, str):
                 tags = [tags]
             tagset = {str(t).strip().lower() for t in tags}
