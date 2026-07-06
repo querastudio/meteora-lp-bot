@@ -61,6 +61,7 @@ _MIN_INTERVAL = {
     # Jupiter lite-api (gratis, no key) -- jeda konservatif, blm ada angka
     # rate-limit resmi yg kita pakai jadi aman lebih lambat.
     "lite-api.jup.ag": 0.5,
+    "api.telegram.org": 0.3,
 }
 
 
