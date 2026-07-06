@@ -67,9 +67,15 @@ def build_sample_ctx() -> dict:
             "sniper_count": 45, "rat_trader_count": 1, "whale_count": 7, "holder_count": 5928,
         },
         "top100": {
-            "available": True, "fresh_pct": 8.0, "fresh_count": 4,
-            "is_new_pct": 6.0, "is_new_count": 3, "suspicious_pct": 2.0,
-            "suspicious_count": 1, "sample_count": 100, "coverage_pct": 78.6,
+            "available": True, "scam_risk_pct": 8.0,
+            "fresh_pct": 8.0, "fresh_count": 4,
+            "wash_trader_pct": 0.0, "wash_trader_count": 0,
+            "sandwich_bot_pct": 0.0, "sandwich_bot_count": 0,
+            "bundler_pct": 0.0, "bundler_count": 0,
+            "rat_trader_pct": 0.0, "rat_trader_count": 0,
+            "is_new_pct": 6.0, "is_new_count": 3,
+            "is_suspicious_pct": 2.0, "is_suspicious_count": 1,
+            "sample_count": 100, "coverage_pct": 78.6,
         },
     }
     narrative = {
