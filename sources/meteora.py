@@ -19,7 +19,7 @@ Field respons (`data[]`) yang kita pakai (lihat _normalize):
 """
 
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from sources import http
 
@@ -114,3 +114,26 @@ def fetch_pools(max_pools: int, page_size: int = 200) -> List[Dict[str, Any]]:
 
     log.info("Meteora: %d pool diambil", len(pools))
     return pools
+
+
+def fetch_pool_by_mint(mint: str, max_search: int = 3000) -> Optional[Dict[str, Any]]:
+    """
+    Cari SATU pool Meteora yang salah satu sisinya (mint_x/mint_y) = mint ini.
+    Dipakai fitur "kirim CA, bot balas analisa" (main.py: analyze_by_mint) --
+    bukan hot-path cron 5 menit, jadi boleh scan lebih dalam (max_search lebih
+    besar drpd MAX_POOLS_PER_RUN biasa).
+
+    Tak ada endpoint resmi "search pool by token mint" yang terverifikasi di
+    /pools (dokumentasinya tak bisa diakses dari sandbox ini) -- daripada
+    menebak nama parameter query yang berisiko 404/salah diam-diam, kita pakai
+    fetch_pools() yang SUDAH terbukti jalan lalu cari mint-nya di sisi klien.
+    Trade-off: pool yang volume-nya sangat kecil (di luar `max_search` pool
+    teratas by volume) tak akan ketemu -- utk kasus itu dianggap "bukan pool
+    Meteora aktif", bagian Kualitas LP di notif ditandai n/a (degrade
+    gracefully, bukan error).
+    """
+    pools = fetch_pools(max_search)
+    for pool in pools:
+        if pool["mint_x"] == mint or pool["mint_y"] == mint:
+            return pool
+    return None

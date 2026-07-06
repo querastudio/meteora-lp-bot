@@ -2,6 +2,9 @@
 main.py — Orkestrasi pipeline cascade (Stage 1 -> 7).
 
 Alur per run (dipanggil cron GitHub Actions tiap 5 menit):
+  0. Cek pesan Telegram baru -- fitur "kirim CA, bot balas analisa" on-demand
+     (lihat sources/telegram_inbound.py & analyze_by_mint di bawah). Delay
+     maks ~5 menit (polling di cron yang sama, bukan webhook -- no infra baru).
   1. Load state (anti-duplikat + riwayat harga utk Stage 6) & harga SOL.
   2. Fetch pool Meteora, urut aktivitas.
   3. Cascade: Stage 1 (pool) -> Stage 2 (mcap/volume) -> Stage 3 (keamanan)
@@ -14,14 +17,17 @@ Prinsip: cepat, idempoten, degrade gracefully. Satu API mati != run crash.
 
 import logging
 import sys
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import config
 import notify
 import scoring
 import state as state_mod
 from screening import hard_filters, holders, lp_quality, volatility
-from sources import dexscreener, geckoterminal, gemini, groq, helius, jupiter, lunarcrush, meteora, narrative
+from sources import (
+    dexscreener, geckoterminal, gemini, groq, helius, jupiter, lunarcrush,
+    meteora, narrative, telegram_inbound,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -36,6 +42,16 @@ def run() -> int:
     st = state_mod.load()
     sol_price = dexscreener.get_sol_price_usd()
     log.info("Harga SOL: $%.2f", sol_price)
+
+    # ---- Fitur "kirim CA, bot balas analisa" (on-demand, mint apa pun) ----
+    offset = state_mod.get_telegram_offset(st)
+    requested_mints, next_offset = telegram_inbound.poll_new_mints(offset)
+    state_mod.set_telegram_offset(st, next_offset)
+    for req_mint in dict.fromkeys(requested_mints):  # dedup, jaga urutan
+        try:
+            analyze_by_mint(req_mint, st, sol_price)
+        except Exception as e:  # noqa: BLE001 — 1 permintaan error != crash run
+            log.exception("Error analisa manual mint %s: %s", req_mint, e)
 
     pools = meteora.fetch_pools(config.MAX_POOLS_PER_RUN)
     if not pools:
@@ -228,6 +244,120 @@ def _process_candidate(pool: Dict[str, Any], st: Dict[str, Any], sol_price: floa
         state_mod.mark_notified(st, mint, verdict)
         return True
     return False
+
+
+def analyze_by_mint(mint: str, st: Dict[str, Any], sol_price: float) -> bool:
+    """
+    Analisa 1 token by mint address atas permintaan MANUAL user (kirim CA ke
+    chat bot -- lihat sources/telegram_inbound.py). BEDA dari
+    _process_candidate:
+      - TIDAK di-gate hard filter -- user sengaja minta lihat token spesifik
+        ini, jadi hasil tetap dikirim walau ada gate yang gagal (ditampilkan
+        apa adanya oleh notify.format_manual_message, bukan disembunyikan).
+      - TIDAK kena anti-duplikat should_notify -- selalu dibalas tiap diminta.
+      - Pool Meteora OPSIONAL (dicari via meteora.fetch_pool_by_mint) --
+        token yang tak nge-LP di Meteora tetap dianalisa (keamanan/holder/
+        narasi), cuma bagian Kualitas LP yang n/a.
+    """
+    log.info("Analisa manual diminta utk mint %s...", mint[:8])
+    metrics = dexscreener.get_token_metrics(mint)
+    if not metrics:
+        notify.send(
+            f"🔍 Analisa manual: mint <code>{mint}</code> tak ditemukan di "
+            f"Dexscreener (bukan token SPL aktif trading, atau alamat salah)."
+        )
+        return False
+
+    symbol = metrics["symbol"]
+    state_mod.record_price(st, mint, metrics["price_usd"], symbol)
+
+    stage2_pass, stage2_reasons = hard_filters.stage2_token(metrics)
+
+    sec = helius.get_security_info(mint)
+    stage3_pass, stage3_reasons, warn3 = hard_filters.stage3_security(sec)
+    warnings: List[str] = list(warn3)
+
+    hold = holders.analyze(mint, sol_price)
+    if not hold.get("available"):
+        warnings.append("distribusi holder tak terverifikasi")
+    if hold.get("note"):
+        warnings.append(hold["note"])
+
+    pool: Optional[Dict[str, Any]] = meteora.fetch_pool_by_mint(mint)
+    if pool:
+        lp = lp_quality.analyze(pool, metrics)
+    else:
+        lp = {
+            "fee_tvl_daily_pct": 0.0, "fee_estimated": False, "vol_tvl": 0.0,
+            "pool_age_hours": None, "fee_score": 0.5, "vol_score": 0.5,
+            "age_score": 0.5, "lp_conc_score": 0.5, "lp_conc_estimated": True,
+        }
+        warnings.append("bukan pool Meteora / pool tak ditemukan -- kualitas LP n/a")
+
+    history = state_mod.get_price_history(st, mint)
+    vol = volatility.analyze(metrics, history)
+
+    nar = narrative.evaluate_narrative(metrics.get("name", ""), symbol)
+
+    vwap: Dict[str, Any] = {}
+    if config.VWAP_MOMENTUM_ENABLED:
+        vwap_pool_address = metrics.get("pair_address") or (pool["address"] if pool else "")
+        if vwap_pool_address:
+            vwap = geckoterminal.vwap_signal(vwap_pool_address, metrics["price_usd"])
+
+    lc = lunarcrush.social_signal(symbol)
+    jup = jupiter.organic_score(mint)
+
+    reddit_cnt = nar.get("reddit", {}).get("post_count", 0)
+    news_cnt = nar.get("news", {}).get("article_count", 0)
+    has_enough_evidence = (
+        reddit_cnt >= config.AI_MIN_REDDIT_POSTS or news_cnt >= config.AI_MIN_NEWS_ARTICLES
+    )
+    nar_ai = {}
+    if has_enough_evidence:
+        nar_ai = gemini.assess_narrative(symbol, nar.get("category", "unknown"), nar, lp, vol, hold, vwap, jup)
+        if not nar_ai.get("available"):
+            nar_ai = groq.assess_narrative(symbol, nar.get("category", "unknown"), nar, lp, vol, hold, vwap, jup)
+    else:
+        log.info(
+            "$%s (manual): bukti narasi terlalu tipis (reddit=%d, news=%d) -- skip AI check",
+            symbol, reddit_cnt, news_cnt,
+        )
+    if nar_ai.get("available"):
+        nar["score"] = round(nar.get("score", 0.0) * nar_ai["score_multiplier"], 3)
+    nar["ai"] = nar_ai
+
+    scored = scoring.compute(lp, vol, hold, nar, warnings, vwap, lc, jup)
+    log.info(
+        "$%s (manual) -> skor %.0f (verdict internal %s) breakdown=%s",
+        symbol, scored["score"], scored["verdict"], scored["breakdown"],
+    )
+
+    links = notify.build_manual_links(mint, pool["address"] if pool else "", symbol)
+    ctx = {
+        "verdict": scored["verdict"],
+        "score": scored["score"],
+        "symbol": symbol,
+        "mint": mint,
+        "metrics": metrics,
+        "pool_data": pool,
+        "security": sec or {},
+        "holders": hold,
+        "lp": lp,
+        "vol": vol,
+        "vwap": vwap,
+        "lunarcrush": lc,
+        "jupiter": jup,
+        "narrative": nar,
+        "warnings": warnings,
+        "links": links,
+        "stage2_pass": stage2_pass,
+        "stage2_reasons": stage2_reasons,
+        "stage3_pass": stage3_pass,
+        "stage3_reasons": stage3_reasons,
+    }
+    text = notify.format_manual_message(ctx)
+    return notify.send(text)
 
 
 def _maybe_send_skip(mint, pool, symbol, reasons, st):

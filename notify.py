@@ -158,86 +158,7 @@ def format_message(ctx: Dict[str, Any]) -> str:
 
     # NARASI — dipecah 2 sumbu: VIRALITAS (breadth+volume+diversitas komunitas)
     # vs DAYA TAHAN (masih hidup beberapa hari, bukan cuma spike sesaat).
-    if nar.get("viral_label") != "OFF":
-        lines.append(
-            f"📈 <b>NARASI</b> — Viralitas: {nar.get('viral_label','?')} | "
-            f"Daya Tahan: {nar.get('durability_label','?')}"
-        )
-        lines.append(f"─ Kategori: {nar.get('category','?')}")
-
-        t = nar.get("trends", {})
-        if t.get("available"):
-            trend_txt = "📈 naik" if t.get("rising") else "📉 turun"
-            sustain = " (blm anjlok)" if t.get("sustained") else " (sudah anjlok)"
-            lines.append(f"─ Google Trends 7d: {trend_txt}{sustain}, avg={t.get('avg',0)}")
-        else:
-            lines.append("─ Google Trends: n/a")
-
-        yt = nar.get("youtube", {})
-        if yt.get("available"):
-            lines.append(
-                f"─ YouTube: {yt.get('video_count',0)} video / {_h(yt.get('total_views',0))} view "
-                f"/ {yt.get('channel_count',0)} channel berbeda (72j)"
-            )
-        else:
-            lines.append("─ YouTube: n/a (butuh YOUTUBE_API_KEY)")
-
-        rd = nar.get("reddit", {})
-        if rd.get("available"):
-            fresh = "✅ msh ada post baru 24j" if rd.get("posts_last24h", 0) > 0 else "⚠️ tak ada post baru 24j"
-            lines.append(
-                f"─ Reddit: {rd.get('post_count',0)} post / {_h(rd.get('total_score',0))} upvote "
-                f"/ {rd.get('subreddit_count',0)} subreddit berbeda ({fresh})"
-            )
-        else:
-            lines.append("─ Reddit: n/a")
-
-        nw = nar.get("news", {})
-        if nw.get("available"):
-            lines.append(f"─ News: {nw.get('article_count',0)} artikel dari {nw.get('domain_count',0)} domain berbeda")
-        else:
-            lines.append("─ News: n/a")
-
-        if lc.get("available"):
-            lines.append(
-                f"─ LunarCrush: Galaxy Score {lc.get('galaxy_score',0):.0f}/100, "
-                f"sentiment {lc.get('sentiment_pct',0):.0f}% positif, "
-                f"{lc.get('num_contributors',0)} kontributor (24j)"
-            )
-        elif config.LUNARCRUSH_ENABLED and config.LUNARCRUSH_API_KEY:
-            lines.append("─ LunarCrush: n/a (belum ter-index -- wajar utk token baru)")
-
-        # Insight kualitatif otomatis (rule-based dari kombinasi angka di atas).
-        for insight in nar.get("insights", [])[:3]:
-            lines.append(f"  💡 {html.escape(insight)}")
-
-        # Konteks: kutipan ASLI (bukan karangan) dari post/artikel paling relevan
-        # -- ini "penjelasan mengenai tokennya" (siapa/apa yg dibahas), diambil
-        # dari data nyata, bukan sinopsis otomatis yang bisa salah/mengarang.
-        evidence = nar.get("evidence", [])
-        if evidence:
-            lines.append("─ <b>Konteks</b> (kutipan asli):")
-            for ev in evidence:
-                src_txt = html.escape(ev["source"])
-                if ev.get("url"):
-                    lines.append(f"  📝 {_link(ev['text'], ev['url'])} — <i>{src_txt}</i>")
-                else:
-                    lines.append(f"  📝 {html.escape(ev['text'])} — <i>{src_txt}</i>")
-
-        ai = nar.get("ai", {})
-        if ai.get("available"):
-            ai_emoji = {"organik": "✅", "campuran": "🟡", "terkoordinasi": "🔴"}.get(ai["authenticity"], "")
-            lines.append(f"─ 🤖 AI narasi: {ai['authenticity']} {ai_emoji}")
-            lines.append(f"  🧭 <b>Tesis AI</b>: <i>{html.escape(ai['thesis'])}</i>")
-
-        # X (Twitter) tak bisa di-API gratis -> sisipkan link cashtag & community
-        # langsung di blok narasi (bukan cuma di baris link bawah) supaya user
-        # cek "vibe" manual sebagai bagian dari due diligence narasi, bukan afterthought.
-        lines.append(
-            f"─ X (Twitter): {_link('Cashtag $'+sym, links['X Cashtag'])} | "
-            f"{_link('Community', links['X Community'])} — cek manual ⚠️"
-        )
-        lines.append("")
+    lines.extend(_narrative_lines(nar, lc, links, sym))
 
     # Warnings ringkas
     if warns:
@@ -245,6 +166,226 @@ def format_message(ctx: Dict[str, Any]) -> str:
         lines.append("")
 
     # LINK VERIFIKASI MANUAL
+    lines.append("🔗 <b>VERIFIKASI MANUAL</b> (klik):")
+    order = [
+        "GMGN", "Bubblemaps", "DevsNightmare", "Deepnets", "RugCheck", "SolScan",
+        "pump.fun", "X search", "TikTok", "Instagram",
+    ]
+    row = " | ".join(_link(k, links[k]) for k in order if k in links)
+    lines.append(row)
+
+    return "\n".join(lines)
+
+
+def _narrative_lines(nar: Dict[str, Any], lc: Dict[str, Any], links: Dict[str, str], sym: str) -> List[str]:
+    """Blok NARASI (dipakai format_message & format_manual_message -- identik)."""
+    lines: List[str] = []
+    if nar.get("viral_label") == "OFF":
+        return lines
+
+    lines.append(
+        f"📈 <b>NARASI</b> — Viralitas: {nar.get('viral_label','?')} | "
+        f"Daya Tahan: {nar.get('durability_label','?')}"
+    )
+    lines.append(f"─ Kategori: {nar.get('category','?')}")
+
+    t = nar.get("trends", {})
+    if t.get("available"):
+        trend_txt = "📈 naik" if t.get("rising") else "📉 turun"
+        sustain = " (blm anjlok)" if t.get("sustained") else " (sudah anjlok)"
+        lines.append(f"─ Google Trends 7d: {trend_txt}{sustain}, avg={t.get('avg',0)}")
+    else:
+        lines.append("─ Google Trends: n/a")
+
+    yt = nar.get("youtube", {})
+    if yt.get("available"):
+        lines.append(
+            f"─ YouTube: {yt.get('video_count',0)} video / {_h(yt.get('total_views',0))} view "
+            f"/ {yt.get('channel_count',0)} channel berbeda (72j)"
+        )
+    else:
+        lines.append("─ YouTube: n/a (butuh YOUTUBE_API_KEY)")
+
+    rd = nar.get("reddit", {})
+    if rd.get("available"):
+        fresh = "✅ msh ada post baru 24j" if rd.get("posts_last24h", 0) > 0 else "⚠️ tak ada post baru 24j"
+        lines.append(
+            f"─ Reddit: {rd.get('post_count',0)} post / {_h(rd.get('total_score',0))} upvote "
+            f"/ {rd.get('subreddit_count',0)} subreddit berbeda ({fresh})"
+        )
+    else:
+        lines.append("─ Reddit: n/a")
+
+    nw = nar.get("news", {})
+    if nw.get("available"):
+        lines.append(f"─ News: {nw.get('article_count',0)} artikel dari {nw.get('domain_count',0)} domain berbeda")
+    else:
+        lines.append("─ News: n/a")
+
+    if lc.get("available"):
+        lines.append(
+            f"─ LunarCrush: Galaxy Score {lc.get('galaxy_score',0):.0f}/100, "
+            f"sentiment {lc.get('sentiment_pct',0):.0f}% positif, "
+            f"{lc.get('num_contributors',0)} kontributor (24j)"
+        )
+    elif config.LUNARCRUSH_ENABLED and config.LUNARCRUSH_API_KEY:
+        lines.append("─ LunarCrush: n/a (belum ter-index -- wajar utk token baru)")
+
+    # Insight kualitatif otomatis (rule-based dari kombinasi angka di atas).
+    for insight in nar.get("insights", [])[:3]:
+        lines.append(f"  💡 {html.escape(insight)}")
+
+    # Konteks: kutipan ASLI (bukan karangan) dari post/artikel paling relevan
+    # -- ini "penjelasan mengenai tokennya" (siapa/apa yg dibahas), diambil
+    # dari data nyata, bukan sinopsis otomatis yang bisa salah/mengarang.
+    evidence = nar.get("evidence", [])
+    if evidence:
+        lines.append("─ <b>Konteks</b> (kutipan asli):")
+        for ev in evidence:
+            src_txt = html.escape(ev["source"])
+            if ev.get("url"):
+                lines.append(f"  📝 {_link(ev['text'], ev['url'])} — <i>{src_txt}</i>")
+            else:
+                lines.append(f"  📝 {html.escape(ev['text'])} — <i>{src_txt}</i>")
+
+    ai = nar.get("ai", {})
+    if ai.get("available"):
+        ai_emoji = {"organik": "✅", "campuran": "🟡", "terkoordinasi": "🔴"}.get(ai["authenticity"], "")
+        lines.append(f"─ 🤖 AI narasi: {ai['authenticity']} {ai_emoji}")
+        lines.append(f"  🧭 <b>Tesis AI</b>: <i>{html.escape(ai['thesis'])}</i>")
+
+    # X (Twitter) tak bisa di-API gratis -> sisipkan link cashtag & community
+    # langsung di blok narasi (bukan cuma di baris link bawah) supaya user
+    # cek "vibe" manual sebagai bagian dari due diligence narasi, bukan afterthought.
+    if "X Cashtag" in links and "X Community" in links:
+        lines.append(
+            f"─ X (Twitter): {_link('Cashtag $'+sym, links['X Cashtag'])} | "
+            f"{_link('Community', links['X Community'])} — cek manual ⚠️"
+        )
+    lines.append("")
+    return lines
+
+
+# ---------------------------------------------------------------------------
+# Format pesan ANALISA MANUAL (user kirim CA ke chat bot -- lihat
+# sources/telegram_inbound.py & main.py:analyze_by_mint)
+# ---------------------------------------------------------------------------
+def format_manual_message(ctx: Dict[str, Any]) -> str:
+    """
+    BEDA dari format_message(): dipakai utk hasil analisa ON-DEMAND (mint apa
+    pun yang user kirim manual), BUKAN hasil auto-screening yang sudah lolos
+    hard gate. Karena itu hard gate ditampilkan APA ADANYA (pass/fail
+    sungguhan dari stage2_pass/stage3_pass/holders, bukan diasumsikan lolos
+    spt format_message), dan pool Meteora OPSIONAL (bisa None kalau token tak
+    nge-LP di Meteora -- bagian Kualitas LP ditandai n/a, bukan gagal total).
+    Selalu dikirim balik ke user terlepas dari verdict/skor -- ini permintaan
+    eksplisit, bukan notifikasi auto yang perlu di-filter anti-spam.
+    """
+    sym = html.escape(ctx["symbol"])
+    m = ctx["metrics"]
+    pool = ctx.get("pool_data")
+    sec = ctx["security"]
+    h = ctx["holders"]
+    lp = ctx.get("lp") or {}
+    vol = ctx["vol"]
+    vwap = ctx.get("vwap", {})
+    lc = ctx.get("lunarcrush", {})
+    jup = ctx.get("jupiter", {})
+    nar = ctx["narrative"]
+    links = ctx["links"]
+    warns: List[str] = ctx.get("warnings", [])
+    stage2_pass = ctx.get("stage2_pass", True)
+    stage2_reasons = ctx.get("stage2_reasons", [])
+    stage3_pass = ctx.get("stage3_pass", True)
+    stage3_reasons = ctx.get("stage3_reasons", [])
+
+    lines: List[str] = []
+    lines.append(
+        f"🔍 <b>HASIL ANALISA MANUAL — ${sym}</b>  "
+        f"<i>(skor {ctx['score']:.0f}/100, verdict internal {ctx['verdict']})</i>"
+    )
+    lines.append(
+        "<i>Hard gate ditampilkan apa adanya (bisa gagal) -- ini bukan hasil "
+        "auto-screening yang sudah difilter, jadi baca ⚠️/❌ dgn cermat.</i>"
+    )
+    if pool:
+        lines.append(f"Pool: {_link(pool.get('name') or 'Meteora', links.get('Meteora',''))}")
+    else:
+        lines.append("Pool Meteora: tak ditemukan (token mungkin tak nge-LP di Meteora DLMM)")
+    lines.append("")
+
+    lines.append("📊 <b>HARD GATES</b>")
+    lines.append(
+        f"─ MCap ${_h(m.get('market_cap', 0))} | Vol24h ${_h(m.get('volume_h24', 0))} {_yn(stage2_pass)}"
+    )
+    if not stage2_pass and stage2_reasons:
+        lines.append(f"  ⚠️ {'; '.join(stage2_reasons)}")
+    if pool:
+        lines.append(
+            f"─ TVL ${_h(pool.get('tvl_usd', 0))} | Bin {pool.get('bin_step','?')} | "
+            f"Base {pool.get('base_fee_pct','?')}% | Quote {pool.get('_quote_symbol','?')}"
+        )
+        lines.append(f"─ Global fee {pool.get('_cum_fee_sol', 0)} SOL")
+    else:
+        lines.append("─ TVL / Bin / Fee pool: n/a (bukan pool Meteora)")
+    tax_pct = (sec.get("transfer_fee_bps", 0) or 0) / 100.0
+    lines.append(
+        f"─ no-mint {_yn(sec.get('mint_authority') is None)} "
+        f"no-freeze {_yn(sec.get('freeze_authority') is None)} "
+        f"no-tax {_yn(tax_pct <= config.MAX_TRANSFER_FEE_BPS/100)} {_yn(stage3_pass)}"
+    )
+    if not stage3_pass and stage3_reasons:
+        lines.append(f"  ⚠️ {'; '.join(stage3_reasons)}")
+    if h.get("available"):
+        lines.append(f"─ Top10: {h['top10_pct']}% {_yn(h['top10_gate_pass'])}")
+        coord = h.get("coordination_label", "n/a")
+        coord_emoji = {"TINGGI": "🔴", "SEDANG": "🟡", "WAJAR": "✅"}.get(coord, "")
+        lines.append(f"─ Indikasi coordinated trading: {coord_emoji} {coord}")
+        cluster_n = h.get("largest_cluster_wallets", 0)
+        if cluster_n >= 2:
+            lines.append(
+                f"─ Cluster terbesar: {h.get('largest_cluster_pct',0)}% supply / {cluster_n} wallet "
+                f"{_yn(h.get('cluster_gate_pass', True))}"
+            )
+    else:
+        lines.append("─ Holder: data tak tersedia ⚠️")
+    if jup.get("available"):
+        label = jup.get("organic_label") or "?"
+        jup_emoji = {"high": "✅", "medium": "🟡", "low": "🔴"}.get(label, "")
+        lines.append(
+            f"─ Jupiter Organic Score: {jup.get('organic_score',0):.0f}/100 ({label}) {jup_emoji}"
+        )
+    lines.append("")
+
+    if pool:
+        lines.append("💰 <b>KUALITAS LP</b>")
+        fee_flag = "✅" if lp.get("fee_tvl_daily_pct", 0) >= config.FEE_TVL_DAILY_GOOD_PCT else "⚠️"
+        vol_flag = "✅" if lp.get("vol_tvl", 0) >= config.VOL_TVL_GOOD_RATIO else "⚠️"
+        est = " (est)" if lp.get("fee_estimated") else ""
+        lines.append(
+            f"─ Fee/TVL harian: {lp.get('fee_tvl_daily_pct',0)}%{est} {fee_flag} | "
+            f"Vol/TVL: {lp.get('vol_tvl',0)}× {vol_flag}"
+        )
+        if lp.get("pool_age_hours") is not None:
+            lines.append(f"─ Umur pool: {lp['pool_age_hours']:.0f} jam")
+        lines.append("")
+
+    lines.append(
+        f"📉 <b>Volatilitas</b>: {vol['note']} "
+        f"{'✅' if not vol['vertical_death'] else '🔴 mati vertikal'}"
+    )
+    if vwap.get("available"):
+        pct = vwap.get("ratio_pct", 0.0)
+        pos = "di atas" if vwap.get("above_vwap") else "di bawah"
+        lines.append(f"─ VWAP (sejak pool dibuat): harga {pos} VWAP {abs(pct):.0f}%")
+    lines.append("")
+
+    lines.extend(_narrative_lines(nar, lc, links, sym))
+
+    if warns:
+        lines.append("⚠️ <b>CATATAN:</b> " + "; ".join(html.escape(x) for x in warns[:4]))
+        lines.append("")
+
     lines.append("🔗 <b>VERIFIKASI MANUAL</b> (klik):")
     order = [
         "GMGN", "Bubblemaps", "DevsNightmare", "Deepnets", "RugCheck", "SolScan",

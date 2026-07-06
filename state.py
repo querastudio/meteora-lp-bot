@@ -110,3 +110,16 @@ def mark_notified(state: Dict[str, Any], mint: str, verdict: str) -> None:
     tok = state["tokens"].setdefault(mint, {})
     tok["last_verdict"] = verdict
     tok["last_notified_ts"] = time.time()
+
+
+# ---------------------------------------------------------------------------
+# Offset polling Telegram getUpdates (fitur "kirim CA, bot balas analisa").
+# Disimpan di state (bukan var lokal) krn tiap run cron proses baru/exit --
+# tanpa ini, update_id yang sama akan diproses ulang tiap run.
+# ---------------------------------------------------------------------------
+def get_telegram_offset(state: Dict[str, Any]) -> int:
+    return int(state.get("telegram_offset", 0))
+
+
+def set_telegram_offset(state: Dict[str, Any], offset: int) -> None:
+    state["telegram_offset"] = offset
