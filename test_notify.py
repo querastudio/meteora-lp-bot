@@ -57,13 +57,14 @@ def build_sample_ctx() -> dict:
     }
     gmgn_data = {
         "security": {
-            "available": True, "is_honeypot": False, "open_source": "yes",
-            "buy_tax": 0.0, "sell_tax": 0.0, "rug_ratio": 0.05, "flags": [],
+            "available": True, "is_honeypot": False, "open_source": True,
+            "buy_tax": 0.0, "sell_tax": 0.0, "lp_locked": True, "lp_lock_pct": 95.0,
+            "flags": [],
         },
-        "dev_holding": {"available": True, "dev_holding_pct": 3.2},
+        "dev_holding": {"available": True, "dev_holding_pct": 3.2, "dev_status": "creator_close"},
         "holder_tags": {
-            "available": True, "smart_money_pct": 8.5, "bundler_pct": 2.1,
-            "sniper_pct": 1.0, "rat_trader_pct": 0.0, "holder_count": 100,
+            "available": True, "smart_money_count": 58, "renowned_count": 18,
+            "sniper_count": 45, "rat_trader_count": 1, "whale_count": 7, "holder_count": 5928,
         },
     }
     narrative = {
