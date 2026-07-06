@@ -86,21 +86,35 @@ jobs:
             exit 0
           fi
           cp state_data.json /tmp/state_local_snapshot.json
-          for i in 1 2 3 4 5; do
+          pushed=0
+          # 8 percobaan (naik dari 5) -- dgn run manual/dispatch numpuk beruntun
+          # (mis. sesi testing), kontensi bisa lebih panjang drpd cron 5-menit
+          # normal. Backoff naik bertahap spy makin lama makin longgar.
+          for i in 1 2 3 4 5 6 7 8; do
             git fetch origin ${{ github.ref_name }}
             git checkout origin/${{ github.ref_name }} -- state_data.json
             python state.py /tmp/state_local_snapshot.json
             git add state_data.json
             if git diff --cached --quiet; then
               echo "state hasil merge sama dgn remote, tak perlu commit"
+              pushed=1
               break
             fi
             git commit -m "chore(state): update ATH & notif history [skip ci]"
             if git push origin HEAD:${{ github.ref_name }}; then
               echo "state pushed (percobaan $i)"
+              pushed=1
               break
             fi
             echo "push gagal (race dgn run lain), retry $i"
             git reset --soft HEAD~1
             sleep $((i*2))
           done
+          if [[ "$pushed" -ne 1 ]]; then
+            # GAGAL TOTAL -- terlihat jelas di log (bukan lagi silent-loss spt
+            # bug lama). Data run ini (price_history/notified/telegram_offset)
+            # tak ter-simpan run ini, tapi tak fatal: run berikutnya (~5 menit
+            # lagi) tetap jalan normal dari state remote terbaru, cuma
+            # kehilangan 1 titik data history utk token yg diproses run ini.
+            echo "::warning::GAGAL total push state setelah 8 percobaan -- kontensi terlalu tinggi (banyak run beruntun). Data run ini tak tersimpan, tapi run berikutnya tetap normal."
+          fi
