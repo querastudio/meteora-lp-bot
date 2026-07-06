@@ -27,14 +27,24 @@ log = logging.getLogger("groq")
 URL = "https://api.groq.com/openai/v1/chat/completions"
 
 
-def assess_narrative(symbol: str, category: str, nar: Dict[str, Any]) -> Dict[str, Any]:
-    """Return { available, authenticity, summary, score_multiplier } -- lihat gemini.py."""
+def assess_narrative(
+    symbol: str,
+    category: str,
+    nar: Dict[str, Any],
+    lp: Dict[str, Any],
+    vol: Dict[str, Any],
+    hold: Dict[str, Any],
+    vwap: Dict[str, Any],
+    jup: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Return { available, authenticity, thesis, score_multiplier } -- lihat gemini.py."""
     out = ai_common.empty_result()
     if not config.GROQ_NARRATIVE_ENABLED or not config.GROQ_API_KEY:
         return out
 
     evidence = ai_common.build_evidence_block(nar)
-    prompt = ai_common.build_prompt(symbol, category, evidence)
+    context = ai_common.build_context_block(lp, vol, hold, nar, vwap, jup)
+    prompt = ai_common.build_prompt(symbol, category, evidence, context)
 
     try:
         body = {

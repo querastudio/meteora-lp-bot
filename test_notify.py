@@ -85,7 +85,10 @@ def build_sample_ctx() -> dict:
         "news": {"available": True, "article_count": 12, "domain_count": 6},
         "ai": {
             "available": True, "authenticity": "organik",
-            "summary": "Pembahasan datang dari komunitas & sumber berita berbeda, bukan pola pesan seragam.",
+            "thesis": (
+                "Fee/TVL sehat dan volume tahan bareng distribusi holder wajar -- kombinasi ini "
+                "cocok utk LP pasif jangka menengah, narasi komunitas juga tampak organik lintas platform."
+            ),
             "score_multiplier": 1.0,
         },
     }

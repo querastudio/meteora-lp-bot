@@ -227,9 +227,8 @@ def format_message(ctx: Dict[str, Any]) -> str:
         ai = nar.get("ai", {})
         if ai.get("available"):
             ai_emoji = {"organik": "✅", "campuran": "🟡", "terkoordinasi": "🔴"}.get(ai["authenticity"], "")
-            lines.append(
-                f"─ 🤖 AI check: {ai['authenticity']} {ai_emoji} — <i>{html.escape(ai['summary'])}</i>"
-            )
+            lines.append(f"─ 🤖 AI narasi: {ai['authenticity']} {ai_emoji}")
+            lines.append(f"  🧭 <b>Tesis AI</b>: <i>{html.escape(ai['thesis'])}</i>")
 
         # X (Twitter) tak bisa di-API gratis -> sisipkan link cashtag & community
         # langsung di blok narasi (bukan cuma di baris link bawah) supaya user
