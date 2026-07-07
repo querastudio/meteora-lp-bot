@@ -150,7 +150,7 @@ def _process_candidate(pool: Dict[str, Any], st: Dict[str, Any], sol_price: floa
         return False
 
     # ---- STAGE 7: narasi viral (degrade gracefully) ----
-    nar = narrative.evaluate_narrative(metrics.get("name", ""), symbol)
+    nar = narrative.evaluate_narrative(metrics.get("name", ""), symbol, mint)
 
     # ---- MOMENTUM VWAP (opsional, soft score -- degrade gracefully) ----
     # Pakai pool address yg SAMA dgn sumber harga "sekarang" (best-pair
@@ -308,7 +308,7 @@ def analyze_by_mint(mint: str, st: Dict[str, Any], sol_price: float) -> bool:
     history = state_mod.get_price_history(st, mint)
     vol = volatility.analyze(metrics, history)
 
-    nar = narrative.evaluate_narrative(metrics.get("name", ""), symbol)
+    nar = narrative.evaluate_narrative(metrics.get("name", ""), symbol, mint)
 
     vwap: Dict[str, Any] = {}
     if config.VWAP_MOMENTUM_ENABLED:

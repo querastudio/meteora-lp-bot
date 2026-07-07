@@ -37,7 +37,7 @@ from urllib.parse import quote_plus, urlparse
 from xml.etree import ElementTree as ET
 
 import config
-from sources import http
+from sources import http, pumpfun_community
 
 log = logging.getLogger("narrative")
 
@@ -379,10 +379,15 @@ def _norm(value: float, cap: float) -> float:
     return max(0.0, min(value / cap, 1.0))
 
 
-def evaluate_narrative(name: str, symbol: str) -> Dict[str, Any]:
+def evaluate_narrative(name: str, symbol: str, mint: str = "") -> Dict[str, Any]:
     """
     Gabungkan semua sinyal jadi dua sumbu terpisah + rincian kuantitatif mentah
     (dipakai notify.py utk tampilkan angka asli, bukan cuma label).
+
+    mint (opsional) -- token_address on-chain, dipakai utk cek chat komunitas
+    pump.fun (lihat sources/pumpfun_community.py) -- kanal ke-5 selain
+    Trends/YouTube/Reddit/News, di-key by mint (bukan text search) jadi tak
+    butuh filter relevansi ticker-collision.
 
     Return:
       {
@@ -391,7 +396,7 @@ def evaluate_narrative(name: str, symbol: str) -> Dict[str, Any]:
         durability_label ("TAHAN LAMA"/"SEDANG"/"SESAAT"),
         breadth_score, volume_score, diversity_score, durability_score (0-1),
         insights: [str, ...]  -- kalimat kualitatif otomatis (rule-based),
-        trends, youtube, reddit, news  -- data mentah per sumber,
+        trends, youtube, reddit, news, pumpfun  -- data mentah per sumber,
       }
     """
     empty = {
@@ -399,7 +404,7 @@ def evaluate_narrative(name: str, symbol: str) -> Dict[str, Any]:
         "viral_label": "OFF", "durability_label": "OFF",
         "breadth_score": 0.0, "volume_score": 0.0, "diversity_score": 0.0,
         "durability_score": 0.0, "insights": [], "evidence": [],
-        "trends": {}, "youtube": {}, "reddit": {}, "news": {},
+        "trends": {}, "youtube": {}, "reddit": {}, "news": {}, "pumpfun": {},
     }
     if not config.NARRATIVE_ENABLED:
         return empty
@@ -411,15 +416,17 @@ def evaluate_narrative(name: str, symbol: str) -> Dict[str, Any]:
     youtube = youtube_signal(keyword)
     reddit = reddit_signal(keyword)
     news = google_news_signal(keyword)
+    pumpfun = pumpfun_community.community_signal(mint)
 
-    # --- BREADTH: berapa dari 4 platform yang menunjukkan aktivitas nyata ---
+    # --- BREADTH: berapa dari 5 platform yang menunjukkan aktivitas nyata ---
     active_flags = [
         trends.get("available") and trends.get("rising"),
         youtube.get("available") and youtube.get("video_count", 0) >= config.NARRATIVE_MIN_YOUTUBE_VIDEOS,
         reddit.get("available") and reddit.get("post_count", 0) >= config.NARRATIVE_MIN_REDDIT_POSTS,
         news.get("available") and news.get("article_count", 0) >= config.NARRATIVE_MIN_NEWS_ARTICLES,
+        pumpfun.get("available") and pumpfun.get("post_count", 0) >= config.NARRATIVE_MIN_PUMPFUN_POSTS,
     ]
-    breadth_score = sum(1 for f in active_flags if f) / 4.0
+    breadth_score = sum(1 for f in active_flags if f) / len(active_flags)
 
     # --- VOLUME: angka mentah dinormalisasi (kuantitatif) ---
     vol_parts: List[float] = []
@@ -431,6 +438,8 @@ def evaluate_narrative(name: str, symbol: str) -> Dict[str, Any]:
         vol_parts.append(_norm(reddit.get("total_score", 0), config.NARRATIVE_REDDIT_SCORE_CAP))
     if news.get("available"):
         vol_parts.append(_norm(news.get("article_count", 0), config.NARRATIVE_NEWS_ARTICLES_CAP))
+    if pumpfun.get("available") and pumpfun.get("post_count", 0) > 0:
+        vol_parts.append(_norm(pumpfun.get("total_likes", 0), config.NARRATIVE_PUMPFUN_LIKES_CAP))
     volume_score = sum(vol_parts) / len(vol_parts) if vol_parts else 0.0
 
     # --- DIVERSITAS KOMUNITAS: proxy kualitatif "banyak komunitas/variasi" ---
@@ -450,6 +459,8 @@ def evaluate_narrative(name: str, symbol: str) -> Dict[str, Any]:
     if reddit.get("available") and reddit.get("post_count", 0) > 0:
         # masih ada post BARU 24 jam terakhir dalam window 7 hari -> msh hidup.
         dur_parts.append(1.0 if reddit.get("posts_last24h", 0) > 0 else 0.3)
+    if pumpfun.get("available") and pumpfun.get("post_count", 0) > 0:
+        dur_parts.append(1.0 if pumpfun.get("posts_last24h", 0) > 0 else 0.3)
     durability_score = sum(dur_parts) / len(dur_parts) if dur_parts else 0.0
 
     # --- Skor komposit (dipakai scoring.py, bobot "narrative") ---
@@ -460,27 +471,35 @@ def evaluate_narrative(name: str, symbol: str) -> Dict[str, Any]:
         + 0.25 * durability_score
     )
 
-    # --- Buta-kanal: Reddit/YouTube/News nihil BUKAN bukti "tak ada narasi".
-    # X/Twitter -- kanal UTAMA hype memecoin Solana (lihat docstring modul
-    # ini) -- tak bisa dicek otomatis sama sekali (no API gratis/aman, sudah
-    # diriset tuntas). Kalau ketiga kanal yg KITA pantau nihil, itu cuma
-    # berarti kita buta di sini, bukan token-nya sepi -- jangan hukum skor
-    # jatuh ke LEMAH krn itu, netralkan spt komponen soft-score lain
+    # --- Buta-kanal: Reddit/YouTube/News/pump.fun nihil BUKAN bukti "tak ada
+    # narasi". X/Twitter -- kanal UTAMA hype memecoin Solana (lihat docstring
+    # modul ini) -- tak bisa dicek otomatis sama sekali (no API gratis/aman,
+    # sudah diriset tuntas). Kalau KEEMPAT kanal yg KITA pantau nihil, itu
+    # cuma berarti kita buta di sini, bukan token-nya sepi -- jangan hukum
+    # skor jatuh ke LEMAH krn itu, netralkan spt komponen soft-score lain
     # (VWAP/LunarCrush/Jupiter) yg default netral saat data tak tersedia.
     # (Trends dikecualikan dari cek ini -- kata umum spt "world"/"chance"
     # selalu ada baseline volume tak berkaitan, jadi bukan sinyal andal soal
     # buta/tidaknya kanal lain.)
+    #
+    # pump.fun community MENGECILKAN kejadian ini scr signifikan drpd
+    # sebelumnya (cuma Reddit/YouTube/News): token yg baru migrasi ke
+    # Meteora biasanya blm sempat viral di Reddit/YouTube/News, tapi chat
+    # komunitas pump.fun-nya sendiri (kanal PALING relevan, langsung di
+    # halaman token) sudah aktif sejak awal -- jadi lebih sering skor asli
+    # (bukan floor netral) yg terpakai, persis yg diminta user.
     channels_blind = (
         reddit.get("post_count", 0) == 0
         and youtube.get("video_count", 0) == 0
         and news.get("article_count", 0) == 0
+        and pumpfun.get("post_count", 0) == 0
     )
     if channels_blind:
         score = max(score, 0.5)
 
     # --- Label ---
     if channels_blind:
-        viral_label = "❔ TAK TERUKUR (Reddit/YouTube/News nihil -- cek manual X)"
+        viral_label = "❔ TAK TERUKUR (Reddit/YouTube/News/Pump.fun nihil -- cek manual X)"
     elif breadth_score >= 0.75 and volume_score >= 0.6:
         viral_label = "🔥 SANGAT VIRAL"
     elif breadth_score >= 0.5:
@@ -501,12 +520,12 @@ def evaluate_narrative(name: str, symbol: str) -> Dict[str, Any]:
     insights: List[str] = []
     if channels_blind:
         insights.append(
-            "Reddit/YouTube/News nihil -- BUKAN bukti token ini sepi narasi, "
+            "Reddit/YouTube/News/Pump.fun nihil -- BUKAN bukti token ini sepi narasi, "
             "cuma kanal ini yg buta; X sering jadi kanal utama hype memecoin -- WAJIB cek manual"
         )
     n_active = sum(1 for f in active_flags if f)
     if n_active >= 3:
-        insights.append(f"aktif di {n_active}/4 platform (bukan 1 sumber saja)")
+        insights.append(f"aktif di {n_active}/{len(active_flags)} platform (bukan 1 sumber saja)")
     elif n_active <= 1:
         insights.append("cuma aktif di 1 platform atau kurang -- narasi sempit")
 
@@ -522,6 +541,15 @@ def evaluate_narrative(name: str, symbol: str) -> Dict[str, Any]:
     if reddit.get("available") and reddit.get("post_count", 0) > 0 and reddit.get("posts_last24h", 0) == 0:
         insights.append("Reddit: tak ada post baru 24 jam terakhir -- momentum mereda")
 
+    if pumpfun.get("available") and pumpfun.get("post_count", 0) > 0:
+        spam_pct = pumpfun.get("spam_count", 0) / pumpfun.get("post_count", 1) * 100.0
+        if spam_pct >= 40:
+            insights.append(
+                f"chat pump.fun {spam_pct:.0f}% pesan ditandai spam -- kemungkinan botspam, bukan diskusi organik"
+            )
+        elif pumpfun.get("posts_last24h", 0) == 0:
+            insights.append("chat pump.fun: tak ada pesan baru 24 jam terakhir -- momentum mereda")
+
     if trends.get("available") and not trends.get("sustained"):
         insights.append("Google Trends sudah turun jauh dari puncak -- minat mereda")
 
@@ -535,6 +563,10 @@ def evaluate_narrative(name: str, symbol: str) -> Dict[str, Any]:
         )
     for a in news.get("top_articles", []):
         evidence.append({"text": a["title"], "source": f"News: {a['source']}", "url": a["url"]})
+    for p in pumpfun.get("top_posts", []):
+        evidence.append(
+            {"text": p["text"], "source": f"Chat pump.fun @{p['username']} ({p['likeCount']} like)", "url": ""}
+        )
 
     return {
         "category": category,
@@ -552,4 +584,5 @@ def evaluate_narrative(name: str, symbol: str) -> Dict[str, Any]:
         "youtube": youtube,
         "reddit": reddit,
         "news": news,
+        "pumpfun": pumpfun,
     }

@@ -84,7 +84,7 @@ def build_sample_ctx() -> dict:
         "breadth_score": 1.0, "volume_score": 0.82, "diversity_score": 0.9,
         "durability_score": 0.95,
         "insights": [
-            "aktif di 4/4 platform (bukan 1 sumber saja)",
+            "aktif di 5/5 platform (bukan 1 sumber saja)",
             "8 subreddit & 11 channel berbeda ikut bahas -- indikasi organik lintas komunitas",
         ],
         "evidence": [
@@ -106,6 +106,12 @@ def build_sample_ctx() -> dict:
             "total_comments": 980, "subreddit_count": 8, "posts_last24h": 6,
         },
         "news": {"available": True, "article_count": 12, "domain_count": 6},
+        "pumpfun": {
+            "available": True, "member_count": 420, "post_count": 88,
+            "total_likes": 310, "total_replies": 140, "distinct_posters": 65,
+            "spam_count": 2, "avg_follower_count": 340.5, "posts_last24h": 14,
+            "top_posts": [{"text": f"{symbol} to the moon lfg", "username": "degen123", "likeCount": 42}],
+        },
         "ai": {
             "available": True, "authenticity": "organik",
             "thesis": (
