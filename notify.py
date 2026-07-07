@@ -294,6 +294,33 @@ def _gmgn_lines(gm: Dict[str, Any]) -> List[str]:
     dev = gm.get("dev_holding") or {}
     tags = gm.get("holder_tags") or {}
     top100 = gm.get("top100") or {}
+    vol5 = gm.get("volume") or {}
+
+    if vol5.get("available"):
+        # Momentum TERKINI (5 menit terakhir) -- ditaruh paling atas krn ini
+        # yg jawab keluhan user "notif kerasa telat, udah lewat puncak
+        # volume": bandingkan volume 5m vs rata-rata 5-menitan dari volume
+        # 1 jam (vol_1h/12) -- kalau vol 5m jauh DI BAWAH rata-rata itu,
+        # kemungkinan momentum udah lewat puncak SAAT notif ini dibaca.
+        v5 = vol5.get("volume_5m", 0.0)
+        v1h = vol5.get("volume_1h", 0.0)
+        avg_5m_dari_1h = v1h / 12.0 if v1h > 0 else 0.0
+        if avg_5m_dari_1h > 0:
+            ratio = v5 / avg_5m_dari_1h
+            if ratio >= 1.5:
+                mom_emoji, mom_txt = "🚀", "naik drpd rata-rata 1 jam"
+            elif ratio <= 0.5:
+                mom_emoji, mom_txt = "📉", "turun drpd rata-rata 1 jam -- mgkn sudah lewat puncak"
+            else:
+                mom_emoji, mom_txt = "➡️", "stabil"
+        else:
+            mom_emoji, mom_txt = "", ""
+        mom_suffix = f" {mom_emoji} <i>({mom_txt})</i>" if mom_txt else ""
+        lines.append(
+            f"─ GMGN Momentum: 5m ${_h(vol5.get('volume_5m',0))}{mom_suffix} | "
+            f"1m ${_h(vol5.get('volume_1m',0))} | 1h ${_h(vol5.get('volume_1h',0))} "
+            f"({vol5.get('swaps_5m',0)} swap/5m)"
+        )
 
     if sec.get("available"):
         # honeypot/open_source SERING None (GMGN blm sempat analisis token
