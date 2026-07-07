@@ -16,20 +16,29 @@ filter relevansi ticker-collision (lihat _looks_crypto_related di
 narrative.py) krn mint address unik per token, tak mungkin nyasar ke
 token/topik lain.
 
-Auth: header x-api-key (business API key). Apply via dashboard resmi
-coincommunities.org -- perlu registrasi akun bisnis (email+password) +
-verifikasi email, TIDAK sesimpel apply GMGN (submit public key sekali).
-Kosongkan PUMPFUN_COMMUNITY_API_KEY utk skip sepenuhnya -- narasi tetap
-jalan dari 4 kanal lain (degrade gracefully, JANGAN crash run).
+Auth -- DUA kredensial BEDA, dikonfirmasi live (7 Juli 2026):
+  - x-api-key (PUMPFUN_COMMUNITY_API_KEY) -- dari menu "API keys" dashboard,
+    HANYA dipakai utk getCommunity() (cek community ada/tidak). Apply via
+    coincommunities.org -- registrasi akun bisnis (email+password) +
+    verifikasi email, TIDAK sesimpel apply GMGN.
+  - x-server-key + x-server-secret (PUMPFUN_COMMUNITY_SERVER_KEY/_SECRET)
+    -- dari menu "Server API keys" (TERPISAH dari "API keys" biasa!),
+    dipakai utk baca pesan & member (endpoint */server, didesain khusus
+    backend/bot tanpa sesi login user). Live run konfirmasi: getMessages/
+    getCommunityMembers pakai x-api-key BALIK 401 walau key sama persis
+    yg sukses di getCommunity() -- endpoint itu ternyata butuh kredensial
+    server, meski docs SDK sebut "api key" auth (docs vs realita beda lg,
+    pola sama spt GMGN sebelumnya).
+Kosongkan salah satu/semua utk skip bagian terkait -- narasi tetap jalan
+dari kanal lain (degrade gracefully, JANGAN crash run).
 
 Skema respons: getCommunity() dikonfirmasi resmi dari contoh docs SDK
-(wrapper { community: {...} }). Field community selain {id, tokenAddress,
-createdAt} (mis. memberCount/postCount) BELUM dikonfirmasi ada beneran --
-messages/members endpoint jg parsing DEFENSIF (coba beberapa nama key
-wrapper umum). TEMPORARY: log struktur mentah sekali per token supaya
-field asli bisa diverifikasi/diperbaiki dari log run nyata begitu API
-key sudah tersedia (blm ada saat modul ini ditulis) -- pola sama spt
-verifikasi sources/gmgn.py sebelumnya.
+(wrapper { community: {...} }) DAN dari live run (field asli persis
+{id, tokenAddress, createdAt}, TANPA memberCount -- makanya member_count
+fallback ke len(member_rows)). messages/members endpoint (skema */server)
+parsing DEFENSIF (coba beberapa nama key wrapper umum) + log struktur
+mentah sekali per token -- field asli blm terverifikasi krn baru 401
+(scope server key blm diverifikasi user saat modul ini ditulis).
 """
 
 import logging
@@ -48,10 +57,27 @@ def _headers() -> Dict[str, str]:
     return {"x-api-key": config.PUMPFUN_COMMUNITY_API_KEY}
 
 
+def _server_headers() -> Dict[str, str]:
+    return {
+        "x-server-key": config.PUMPFUN_COMMUNITY_SERVER_KEY,
+        "x-server-secret": config.PUMPFUN_COMMUNITY_SERVER_SECRET,
+    }
+
+
 def _get(path: str, params: Optional[Dict[str, Any]] = None) -> Optional[Any]:
     if not config.PUMPFUN_COMMUNITY_ENABLED or not config.PUMPFUN_COMMUNITY_API_KEY:
         return None
     return http.get_json(f"{BASE}{path}", params=params, headers=_headers(), timeout=config.HTTP_TIMEOUT)
+
+
+def _get_server(path: str, params: Optional[Dict[str, Any]] = None) -> Optional[Any]:
+    if (
+        not config.PUMPFUN_COMMUNITY_ENABLED
+        or not config.PUMPFUN_COMMUNITY_SERVER_KEY
+        or not config.PUMPFUN_COMMUNITY_SERVER_SECRET
+    ):
+        return None
+    return http.get_json(f"{BASE}{path}", params=params, headers=_server_headers(), timeout=config.HTTP_TIMEOUT)
 
 
 def _extract_rows(resp: Any, *candidate_keys: str) -> List[Dict[str, Any]]:
@@ -104,7 +130,18 @@ def community_signal(mint: str) -> Dict[str, Any]:
             mint[:6], community,
         )
 
-        msgs_resp = _get(f"/api/v1/communities/{mint}/messages", {"limit": 100, "sort": "time", "order": "desc"})
+        if not config.PUMPFUN_COMMUNITY_SERVER_KEY or not config.PUMPFUN_COMMUNITY_SERVER_SECRET:
+            log.info(
+                "PumpfunCommunity: PUMPFUN_COMMUNITY_SERVER_KEY/_SECRET kosong, skip baca "
+                "pesan/member utk mint %s... (community metadata tetap kekonfirmasi ada, "
+                "tp tak ada data pesan tanpa server key -- lihat docstring modul).",
+                mint[:6],
+            )
+            return out
+
+        msgs_resp = _get_server(
+            f"/api/v1/communities/{mint}/messages/server", {"limit": 100, "sort": "time", "order": "desc"}
+        )
         # msgs_resp is None berarti CALL GAGAL (401/403/5xx/network -- lihat
         # http.request_json, None cuma dikembalikan kalau gagal, BUKAN utk
         # respons sukses berisi array kosong spt {"messages": []}). Dulu
@@ -116,7 +153,7 @@ def community_signal(mint: str) -> Dict[str, Any]:
         rows = _extract_rows(msgs_resp, "messages", "data", "items", "results")
         if msgs_resp and not rows:
             log.info(
-                "PumpfunCommunity: respons getMessages tak sesuai dugaan utk mint %s...: %s",
+                "PumpfunCommunity: respons getMessagesServer tak sesuai dugaan utk mint %s...: %s",
                 mint[:6], str(msgs_resp)[:500],
             )
         elif rows:
@@ -125,24 +162,23 @@ def community_signal(mint: str) -> Dict[str, Any]:
                 mint[:6], sorted(rows[0].keys()) if isinstance(rows[0], dict) else type(rows[0]),
             )
 
-        members_resp = _get(f"/api/v1/communities/{mint}/members", {"limit": 100})
+        members_resp = _get_server(f"/api/v1/communities/{mint}/members/server", {"limit": 100})
         members_call_failed = members_resp is None
         member_rows = _extract_rows(members_resp, "members", "data", "items", "results")
 
         if messages_call_failed and members_call_failed:
-            # Community-nya ADA (getCommunity sukses), tapi getMessages &
-            # getMembers keduanya gagal (mis. 401 walau x-api-key sama persis
-            # dgn yg dipakai getCommunity -- indikasi scope/permission/plan
-            # API key blm mengizinkan baca pesan/member, BUKAN bug di sini).
-            # JANGAN laporkan available=True dgn semua angka 0 -- itu akan
-            # kebaca "community sepi" padahal sebenarnya "kita gagal baca".
-            # Degrade ke unavailable spy narrative.py netral, BUKAN salah
-            # nganggep token ini sepi komunitas.
+            # Community-nya ADA (getCommunity sukses), tapi getMessagesServer &
+            # getCommunityMembersServer keduanya gagal walau x-server-key/secret
+            # sudah diisi -- kemungkinan key server itu sendiri salah/invalid
+            # atau blm di-approve, BUKAN bug di sini (path & header sudah
+            # sesuai docs). JANGAN laporkan available=True dgn semua angka 0
+            # -- itu akan kebaca "community sepi" padahal sebenarnya "kita
+            # gagal baca". Degrade ke unavailable spy narrative.py netral.
             log.warning(
-                "PumpfunCommunity: community ADA utk mint %s... tapi getMessages & getMembers "
-                "GAGAL (401/error) walau getCommunity sukses dgn key yg sama -- kemungkinan "
-                "scope/permission API key blm izinkan baca pesan/member, cek dashboard "
-                "coincommunities.org (bkn bug kode). Degrade ke unavailable.",
+                "PumpfunCommunity: community ADA utk mint %s... tapi getMessagesServer & "
+                "getCommunityMembersServer keduanya GAGAL walau x-server-key/secret sudah "
+                "diisi -- cek lagi apakah key server valid/aktif di dashboard "
+                "coincommunities.org. Degrade ke unavailable.",
                 mint[:6],
             )
             return out

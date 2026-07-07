@@ -54,6 +54,8 @@ jobs:
           LUNARCRUSH_API_KEY: ${{ secrets.LUNARCRUSH_API_KEY }}
           GMGN_API_KEY: ${{ secrets.GMGN_API_KEY }}
           PUMPFUN_COMMUNITY_API_KEY: ${{ secrets.PUMPFUN_COMMUNITY_API_KEY }}
+          PUMPFUN_COMMUNITY_SERVER_KEY: ${{ secrets.PUMPFUN_COMMUNITY_SERVER_KEY }}
+          PUMPFUN_COMMUNITY_SERVER_SECRET: ${{ secrets.PUMPFUN_COMMUNITY_SERVER_SECRET }}
           # Override threshold/bobot lewat repo Variables bila mau (opsional):
           NARRATIVE_ENABLED: ${{ vars.NARRATIVE_ENABLED || 'true' }}
         run: python main.py
