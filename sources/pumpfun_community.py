@@ -52,6 +52,17 @@ log = logging.getLogger("pumpfun_community")
 
 BASE = "https://api.coin-communities.xyz"
 
+# Panjang karakter minimum spy pesan dianggap "opini/tesis substantif"
+# (bukan reaksi refleks pendek spt "gm"/"lfg"/"Tung Tung Tung?") -- proxy
+# kasar, bukan NLP asli, tapi cukup memisahkan reaksi 1-baris dari member
+# yg beneran nulis pendapat soal coin-nya.
+_OPINION_MIN_LENGTH = 60
+# Jumlah kutipan pump.fun yg disimpan sbg evidence utk AI (meme_context/
+# thesis di ai_common.py) -- dinaikkan dari 2 ke 3 krn pump.fun sekarang
+# kanal PRIORITAS narasi, wajar dpt slot kutipan lebih banyak drpd
+# Reddit/News.
+_TOP_POSTS_CAP = 3
+
 
 def _headers() -> Dict[str, str]:
     return {"x-api-key": config.PUMPFUN_COMMUNITY_API_KEY}
@@ -219,9 +230,19 @@ def community_signal(mint: str) -> Dict[str, Any]:
                     "likeCount": int(m.get("likeCount", 0) or 0),
                 })
 
-        # Konteks kualitatif: 2 post PALING banyak like (bukan cuma terbaru),
-        # konsisten dgn pola reddit_signal()/google_news_signal().
+        # Konteks kualitatif: UTAMAKAN pesan SUBSTANTIF (opini/tesis member
+        # soal coin-nya, spt yg diminta user), bukan cuma yg like tertinggi
+        # -- sort-by-like MURNI cenderung nangkep reaksi pendek ("Tung Tung
+        # Tung?", "lfg") krn itu emang lbh gampang dpt banyak like drpd
+        # opini panjang, PADAHAL opini panjanglah yg kasih konteks naratif
+        # asli ke AI (meme_context di ai_common.py). _OPINION_MIN_LENGTH
+        # proxy kasar "ini kemungkinan opini/tesis, bukan reaksi refleks".
         posts_raw.sort(key=lambda p: p["likeCount"], reverse=True)
+        long_posts = [p for p in posts_raw if len(p["text"]) >= _OPINION_MIN_LENGTH]
+        short_posts = [p for p in posts_raw if len(p["text"]) < _OPINION_MIN_LENGTH]
+        # Opini substantif diutamakan; slot sisa (kalau opini kurang dari
+        # cap) diisi reaksi pendek ter-like tertinggi spy tetap ada konteks.
+        top_posts = (long_posts + short_posts)[:_TOP_POSTS_CAP]
 
         out.update({
             "available": True,
@@ -233,7 +254,7 @@ def community_signal(mint: str) -> Dict[str, Any]:
             "spam_count": spam_count,
             "avg_follower_count": round(follower_sum / len(live_rows), 1) if live_rows else 0.0,
             "posts_last24h": posts_24h,
-            "top_posts": posts_raw[:2],
+            "top_posts": top_posts,
         })
         log.info(
             "PumpfunCommunity OK utk mint %s...: %d post / %d member / %d wallet unik / "

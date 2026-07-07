@@ -41,12 +41,12 @@ def build_evidence_block(nar: Dict[str, Any]) -> str:
     di skor narasi (narrative.py), BUKAN tingkat kepercayaan isinya di sini.
     """
     parts: List[str] = []
+    for m in (nar.get("pumpfun", {}) or {}).get("top_posts", []) or []:
+        parts.append(f"- [Chat pump.fun @{m.get('username','?')}] {m.get('text','')}")
     for p in (nar.get("reddit", {}) or {}).get("top_posts", []) or []:
         parts.append(f"- [Reddit r/{p.get('subreddit','?')}] {p.get('title','')}")
     for a in (nar.get("news", {}) or {}).get("top_articles", []) or []:
         parts.append(f"- [News {a.get('source','?')}] {a.get('title','')}")
-    for m in (nar.get("pumpfun", {}) or {}).get("top_posts", []) or []:
-        parts.append(f"- [Chat pump.fun @{m.get('username','?')}] {m.get('text','')}")
     return "\n".join(parts) if parts else "(tidak ada kutipan tersedia)"
 
 

@@ -608,18 +608,23 @@ def evaluate_narrative(name: str, symbol: str, mint: str = "") -> Dict[str, Any]
 
     # --- Evidence: kutipan NYATA (bukan karangan) sbg "penjelasan mengenai
     # tokennya" -- judul post/artikel asli yg paling relevan, biar user tahu
-    # KONTEKS narasinya (mis. "siapa yg bahas, tentang apa"), bukan cuma angka.
+    # KONTEKS narasinya (mis. "siapa yg bahas, tentang apa"), bukan cuma
+    # angka. pump.fun DULUAN (kanal prioritas, suara komunitas resmi token
+    # ini sendiri -- lihat _pick_keyword/NARRATIVE_PUMPFUN_PRIORITY_WEIGHT),
+    # cap dinaikkan 3->5 spy 3 kutipan pump.fun (skrg diutamakan yg
+    # substantif, bukan cuma like tertinggi -- lihat pumpfun_community.py)
+    # tak kepotong duluan oleh evidence Reddit/News.
     evidence: List[Dict[str, str]] = []
+    for p in pumpfun.get("top_posts", []):
+        evidence.append(
+            {"text": p["text"], "source": f"Chat pump.fun @{p['username']} ({p['likeCount']} like)", "url": ""}
+        )
     for p in reddit.get("top_posts", []):
         evidence.append(
             {"text": p["title"], "source": f"Reddit r/{p['subreddit']} ({p['score']} upvote)", "url": p["url"]}
         )
     for a in news.get("top_articles", []):
         evidence.append({"text": a["title"], "source": f"News: {a['source']}", "url": a["url"]})
-    for p in pumpfun.get("top_posts", []):
-        evidence.append(
-            {"text": p["text"], "source": f"Chat pump.fun @{p['username']} ({p['likeCount']} like)", "url": ""}
-        )
 
     return {
         "category": category,
@@ -632,7 +637,7 @@ def evaluate_narrative(name: str, symbol: str, mint: str = "") -> Dict[str, Any]
         "diversity_score": round(diversity_score, 2),
         "durability_score": round(durability_score, 2),
         "insights": insights,
-        "evidence": evidence[:3],
+        "evidence": evidence[:5],
         "trends": trends,
         "youtube": youtube,
         "reddit": reddit,
