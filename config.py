@@ -174,6 +174,15 @@ NARRATIVE_NEWS_DOMAIN_CAP = _env_float("NARRATIVE_NEWS_DOMAIN_CAP", 8)
 # pump.fun otomatis punya community di sini, coverage jauh lebih tinggi drpd
 # Reddit/YouTube utk token BARU. Lihat sources/pumpfun_community.py.
 PUMPFUN_COMMUNITY_API_KEY = os.getenv("PUMPFUN_COMMUNITY_API_KEY", "")
+# Server API key pair (BEDA dari API key biasa di atas) -- dikonfirmasi live
+# (7 Juli 2026): getMessages/getCommunityMembers pakai x-api-key biasa balik
+# 401 walau community lookup (x-api-key sama) sukses. Docs SDK sebut endpoint
+# */Server (getMessagesServer, getCommunityMembersServer) yg didesain khusus
+# utk backend/bot (baca tanpa sesi login user) pakai kredensial TERPISAH:
+# x-server-key + x-server-secret. Bikin dari dashboard coincommunities.org ->
+# menu "Server API keys" (BEDA dari "API keys" biasa).
+PUMPFUN_COMMUNITY_SERVER_KEY = os.getenv("PUMPFUN_COMMUNITY_SERVER_KEY", "")
+PUMPFUN_COMMUNITY_SERVER_SECRET = os.getenv("PUMPFUN_COMMUNITY_SERVER_SECRET", "")
 PUMPFUN_COMMUNITY_ENABLED = _env_bool("PUMPFUN_COMMUNITY_ENABLED", True)
 NARRATIVE_MIN_PUMPFUN_POSTS = _env_int("NARRATIVE_MIN_PUMPFUN_POSTS", 5)
 NARRATIVE_PUMPFUN_LIKES_CAP = _env_float("NARRATIVE_PUMPFUN_LIKES_CAP", 500)
