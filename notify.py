@@ -223,6 +223,18 @@ def _narrative_lines(nar: Dict[str, Any], lc: Dict[str, Any], links: Dict[str, s
     else:
         lines.append("─ News: n/a")
 
+    pf = nar.get("pumpfun", {})
+    if pf.get("available"):
+        fresh = "✅ msh ada pesan baru 24j" if pf.get("posts_last24h", 0) > 0 else "⚠️ tak ada pesan baru 24j"
+        lines.append(
+            f"─ Chat pump.fun: {pf.get('post_count',0)} pesan / {pf.get('member_count',0)} member / "
+            f"{pf.get('distinct_posters',0)} wallet unik posting ({fresh})"
+        )
+    elif config.PUMPFUN_COMMUNITY_ENABLED and config.PUMPFUN_COMMUNITY_API_KEY:
+        lines.append("─ Chat pump.fun: n/a (belum ada community/pesan utk token ini)")
+    else:
+        lines.append("─ Chat pump.fun: n/a (butuh PUMPFUN_COMMUNITY_API_KEY)")
+
     if lc.get("available"):
         lines.append(
             f"─ LunarCrush: Galaxy Score {lc.get('galaxy_score',0):.0f}/100, "

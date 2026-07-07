@@ -65,6 +65,10 @@ _MIN_INTERVAL = {
     # GMGN OpenAPI (gratis) -- dokumentasi sebut ~20 req/detik sustained,
     # jeda konservatif jauh di bawah itu.
     "openapi.gmgn.ai": 0.2,
+    # Coin Communities (backend chat pump.fun) -- rate limit per-business
+    # (field rateLimitPerSecond) blm diketahui angka pastinya utk tier gratis,
+    # jeda konservatif.
+    "api.coin-communities.xyz": 0.5,
 }
 
 
