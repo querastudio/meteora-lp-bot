@@ -77,6 +77,11 @@ def build_sample_ctx() -> dict:
             "is_suspicious_pct": 2.0, "is_suspicious_count": 1,
             "sample_count": 100, "coverage_pct": 78.6,
         },
+        "volume": {
+            "available": True, "volume_1m": 42000, "volume_5m": 210000,
+            "volume_1h": 1_200_000, "buy_volume_5m": 130000,
+            "sell_volume_5m": 80000, "swaps_5m": 85,
+        },
     }
     narrative = {
         "category": "animal", "keyword": symbol, "score": 0.88,

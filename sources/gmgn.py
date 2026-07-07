@@ -210,6 +210,69 @@ def dev_holding(mint: str, chain: str = "sol") -> Dict[str, Any]:
     return out
 
 
+def volume_momentum(mint: str, chain: str = "sol") -> Dict[str, Any]:
+    """
+    Return { available, volume_1m, volume_5m, volume_1h, buy_volume_5m,
+             sell_volume_5m, swaps_5m }.
+
+    Per keluhan user: notif kadang telat terasa krn cron 5 menit (bisa lag
+    lagi kalau GitHub Actions sibuk) + hard gate top10 kadang menahan token
+    pas lagi paling terkonsentrasi/berisiko (baru lolos begitu konsentrasi
+    turun -- itu gate bekerja sesuai desain, BUKAN bug -- lihat diskusi
+    sesi ini). Metrik ini TAK mengubah timing/gate itu, tapi kasih user
+    visibilitas MOMENTUM TERKINI (5 menit terakhir) langsung di notif,
+    biar user sendiri bisa nilai apakah notif ini masih "segar" (vol 5m
+    msh tinggi) atau sudah lewat puncak (vol 5m sudah turun jauh) sebelum
+    ambil keputusan LP.
+
+    Field 'price' pada /v1/token/info SUDAH kekonfirmasi live (sesi ini,
+    verifikasi dev_holding/wallet_tags_stat) py punya volume_1m/volume_5m/
+    volume_1h/buy_volume_5m/sell_volume_5m/swaps_5m -- SAMA persis
+    endpoint yg sudah dipanggil dev_holding(), cuma field ini blm pernah
+    diekstrak. Panggilan HTTP terpisah (bukan digabung ke dev_holding())
+    demi jaga kontrak return dev_holding() yg sudah dipakai main.py --
+    sedikit redundan (2x call /v1/token/info per kandidat) tp GMGN gratis
+    & sudah di-throttle (lihat sources/http.py).
+
+    INFORMASIONAL SAJA spt integrasi GMGN lain di sesi ini -- TAK
+    menyentuh skor/hard gate (beda dari vwap_momentum yg memang sudah
+    berbobot skor via GeckoTerminal).
+    """
+    out = {
+        "available": False, "volume_1m": 0.0, "volume_5m": 0.0, "volume_1h": 0.0,
+        "buy_volume_5m": 0.0, "sell_volume_5m": 0.0, "swaps_5m": 0,
+    }
+    try:
+        data = _get("/v1/token/info", {"chain": chain, "address": mint})
+        if not data:
+            return out
+        d = data[0] if isinstance(data, list) and data else data
+        if not isinstance(d, dict):
+            return out
+
+        price = d.get("price")
+        if not isinstance(price, dict):
+            return out
+
+        out.update({
+            "available": True,
+            "volume_1m": float(price.get("volume_1m", 0) or 0),
+            "volume_5m": float(price.get("volume_5m", 0) or 0),
+            "volume_1h": float(price.get("volume_1h", 0) or 0),
+            "buy_volume_5m": float(price.get("buy_volume_5m", 0) or 0),
+            "sell_volume_5m": float(price.get("sell_volume_5m", 0) or 0),
+            "swaps_5m": int(price.get("swaps_5m", 0) or 0),
+        })
+        log.info(
+            "GMGN volume_momentum OK utk mint %s...: 1m=$%.0f 5m=$%.0f 1h=$%.0f (buy5m=$%.0f/sell5m=$%.0f, %d swap)",
+            mint[:6], out["volume_1m"], out["volume_5m"], out["volume_1h"],
+            out["buy_volume_5m"], out["sell_volume_5m"], out["swaps_5m"],
+        )
+    except Exception as e:  # noqa: BLE001
+        log.info("GMGN volume_momentum gagal utk mint %s...: %s (degrade)", mint[:6], e)
+    return out
+
+
 def top_holder_tags(mint: str, chain: str = "sol") -> Dict[str, Any]:
     """
     Return { available, smart_money_count, sniper_count, rat_trader_count,
