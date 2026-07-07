@@ -265,6 +265,8 @@ def _narrative_lines(nar: Dict[str, Any], lc: Dict[str, Any], links: Dict[str, s
     if ai.get("available"):
         ai_emoji = {"organik": "✅", "campuran": "🟡", "terkoordinasi": "🔴"}.get(ai["authenticity"], "")
         lines.append(f"─ 🤖 AI narasi: {ai['authenticity']} {ai_emoji}")
+        if ai.get("meme_context"):
+            lines.append(f"  🎭 <b>Token ini tentang apa</b>: <i>{html.escape(ai['meme_context'])}</i>")
         lines.append(f"  🧭 <b>Tesis AI</b>: <i>{html.escape(ai['thesis'])}</i>")
 
     # X (Twitter) tak bisa di-API gratis -> sisipkan link cashtag & community

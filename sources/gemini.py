@@ -1,16 +1,22 @@
 """
 sources/gemini.py — Sintesis AI via Gemini API gratis (Google AI Studio).
 
-Dua bagian (lihat sources/ai_common.py utk detail lengkap):
+Tiga bagian (lihat sources/ai_common.py utk detail lengkap):
   1. authenticity -- HANYA dari teks kualitatif narasi (post Reddit/artikel
-     News yang sudah lolos filter _looks_crypto_related di narrative.py).
-     Tetap memengaruhi skor narasi (multiplier 0.6-1.0), BUKAN utk Stage
-     keamanan/hard-gate mana pun. Filosofi: gate rug/kontrak/holder harus
-     tetap deterministik & auditable; LLM cuma menambah "rasa" pada bagian
-     yang memang sudah soft-score (narasi).
-  2. thesis -- sintesis SEMUA metrik (LP/volatilitas/holder/narasi/VWAP/
-     Jupiter) jadi 1-2 kalimat "gambaran besar". PURE TEKS, TIDAK menyentuh
-     skor sama sekali -- murni buat dibaca user di notifikasi.
+     News/chat pump.fun yang sudah lolos filter _looks_crypto_related di
+     narrative.py). Tetap memengaruhi skor narasi (multiplier 0.6-1.0),
+     BUKAN utk Stage keamanan/hard-gate mana pun. Filosofi: gate rug/
+     kontrak/holder harus tetap deterministik & auditable; LLM cuma
+     menambah "rasa" pada bagian yang memang sudah soft-score (narasi).
+  2. meme_context -- ringkasan naratif SINGKAT "token/meme ini tentang apa
+     & kenapa dapat atensi" (AI-themed, utility, hewan lucu viral, dst),
+     disintesis dari kutipan eksternal -- UTAMANYA chat pump.fun (suara
+     komunitas resmi token itu sendiri, paling relevan drpd Reddit/News
+     generik). PURE TEKS deskriptif, TIDAK menyentuh skor.
+  3. thesis -- sintesis SEMUA metrik (LP/volatilitas/holder/narasi/VWAP/
+     Jupiter) jadi 1-2 kalimat "gambaran besar" RISIKO, beda dari
+     meme_context yg deskriptif. PURE TEKS, TIDAK menyentuh skor sama
+     sekali -- murni buat dibaca user di notifikasi.
 
 Kenapa aman dari prompt-injection:
   - Teks Reddit/News (konten publik TAK TEPERCAYA) dikirim ke model murni
@@ -50,9 +56,10 @@ _RESPONSE_SCHEMA = {
             "type": "STRING",
             "enum": ["organik", "campuran", "terkoordinasi"],
         },
+        "meme_context": {"type": "STRING"},
         "thesis": {"type": "STRING"},
     },
-    "required": ["authenticity", "thesis"],
+    "required": ["authenticity", "meme_context", "thesis"],
 }
 
 
@@ -67,10 +74,10 @@ def assess_narrative(
     jup: Dict[str, Any],
 ) -> Dict[str, Any]:
     """
-    Return { available, authenticity, thesis, score_multiplier }.
+    Return { available, authenticity, meme_context, thesis, score_multiplier }.
     score_multiplier (0.6-1.0) dipakai KALIKAN nar['score'] yang sudah ada
-    (rule-based) -- bukan gantikan, cuma nudge terbatas. thesis PURE TEKS,
-    tak memengaruhi skor apa pun.
+    (rule-based) -- bukan gantikan, cuma nudge terbatas. meme_context & thesis
+    PURE TEKS, tak memengaruhi skor apa pun.
     """
     out = ai_common.empty_result()
     if not config.GEMINI_NARRATIVE_ENABLED or not config.GEMINI_API_KEY:
@@ -89,7 +96,7 @@ def assess_narrative(
                 "response_mime_type": "application/json",
                 "response_schema": _RESPONSE_SCHEMA,
                 "temperature": 0.2,
-                "maxOutputTokens": 200,
+                "maxOutputTokens": 320,
             },
         }
         resp = http.post_json(url, json_body=body, timeout=config.HTTP_TIMEOUT)
