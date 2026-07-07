@@ -446,6 +446,14 @@ def evaluate_narrative(name: str, symbol: str, mint: str = "") -> Dict[str, Any]
 
     keyword = _pick_keyword(name, symbol)
     category = detect_category(name, symbol)
+    # TEMPORARY: log name/symbol/keyword/category mentah -- verifikasi
+    # laporan user (kategori "animal" utk $SAPIJIJU, kelihatan salah) perlu
+    # lihat field name ASLI on-chain dulu sebelum diputuskan ini bug regex
+    # atau nama token itu sendiri emang menyesatkan (di luar kendali kita).
+    log.info(
+        "DEBUG kategori/keyword utk mint %s...: name=%r symbol=%r -> keyword=%r kategori=%r",
+        mint[:6] if mint else "?", name, symbol, keyword, category,
+    )
 
     trends = google_trends_signal(keyword)
     youtube = youtube_signal(keyword)
@@ -562,7 +570,18 @@ def evaluate_narrative(name: str, symbol: str, mint: str = "") -> Dict[str, Any]
     else:
         viral_label = "LEMAH"
 
-    if durability_score >= 0.7:
+    # channels_blind jg berlaku di sini -- BUG nyata yg dilaporkan user
+    # ($SAPIJIJU): Reddit/YouTube/News/pump.fun keempatnya nihil, tapi
+    # durability_label sempat tetap pede bilang "TAHAN LAMA" krn dur_parts
+    # cuma kebagian 1 kontributor (Google Trends, yg baseline generiknya
+    # sendiri BUKAN sinyal andal -- lihat catatan channels_blind di atas).
+    # Label sekonfiden "TAHAN LAMA" dari 1 sinyal lemah/berisik saja,
+    # sementara viral_label di baris sebelumnya udah jujur bilang "TAK
+    # TERUKUR", itu KONTRADIKTIF & menyesatkan -- durability_label WAJIB
+    # dpt perlakuan "tak terukur" yg SAMA drpd kelihatan pede palsu.
+    if channels_blind:
+        durability_label = "❔ TAK TERUKUR (data terlalu tipis -- cek manual X)"
+    elif durability_score >= 0.7:
         durability_label = "TAHAN LAMA"
     elif durability_score >= 0.4:
         durability_label = "SEDANG"
