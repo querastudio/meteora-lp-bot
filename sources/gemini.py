@@ -54,7 +54,7 @@ _RESPONSE_SCHEMA = {
     "properties": {
         "authenticity": {
             "type": "STRING",
-            "enum": ["organik", "campuran", "terkoordinasi"],
+            "enum": ["organik", "campuran", "terkoordinasi", "tidak diketahui"],
         },
         "meme_context": {"type": "STRING"},
         "thesis": {"type": "STRING"},
