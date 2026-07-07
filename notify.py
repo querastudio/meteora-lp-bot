@@ -263,7 +263,9 @@ def _narrative_lines(nar: Dict[str, Any], lc: Dict[str, Any], links: Dict[str, s
 
     ai = nar.get("ai", {})
     if ai.get("available"):
-        ai_emoji = {"organik": "✅", "campuran": "🟡", "terkoordinasi": "🔴"}.get(ai["authenticity"], "")
+        ai_emoji = {
+            "organik": "✅", "campuran": "🟡", "terkoordinasi": "🔴", "tidak diketahui": "❔",
+        }.get(ai["authenticity"], "")
         lines.append(f"─ 🤖 AI narasi: {ai['authenticity']} {ai_emoji}")
         if ai.get("meme_context"):
             lines.append(f"  🎭 <b>Token ini tentang apa</b>: <i>{html.escape(ai['meme_context'])}</i>")

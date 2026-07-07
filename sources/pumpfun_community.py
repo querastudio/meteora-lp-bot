@@ -42,6 +42,7 @@ mentah sekali per token -- field asli blm terverifikasi krn baru 401
 """
 
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -57,6 +58,22 @@ BASE = "https://api.coin-communities.xyz"
 # kasar, bukan NLP asli, tapi cukup memisahkan reaksi 1-baris dari member
 # yg beneran nulis pendapat soal coin-nya.
 _OPINION_MIN_LENGTH = 60
+
+# Frasa umum bot-spam yang disebar SAMA PERSIS ke banyak komunitas token
+# berbeda (bukan cuma token ini) -- kasus nyata: pesan panjang "Stock
+# Upgrade Now Live! ... convert meme coin holdings into stock-backed
+# positions ... staking rewards" lolos filter _OPINION_MIN_LENGTH krn
+# panjang, lalu disodorkan ke AI sbg "opini substantif" & memicu halusinasi
+# (AI mengarang narasi "utility palsu konversi saham" dari 1 pesan spam
+# generik). Pesan yg cocok pola ini dikecualikan dari top_posts SAMA
+# SEKALI (bukan cuma didemosikan ke short_posts) krn isinya bukan
+# representasi komunitas token ini, apapun panjangnya.
+_SPAM_PATTERN = re.compile(
+    r"\b(stock-backed|staking rewards?|presale|pre-sale|whitelist|airdrop|"
+    r"guaranteed profit|1000x|100x gem|join (our|the) (telegram|discord)|"
+    r"dm (me|us) (for|to)|click here|limited time offer|exclusive access)\b",
+    re.IGNORECASE,
+)
 # Jumlah kutipan pump.fun yg disimpan sbg evidence utk AI (meme_context/
 # thesis di ai_common.py) -- dinaikkan dari 2 ke 3 krn pump.fun sekarang
 # kanal PRIORITAS narasi, wajar dpt slot kutipan lebih banyak drpd
@@ -224,7 +241,7 @@ def community_signal(mint: str) -> Dict[str, Any]:
                 except ValueError:
                     pass
             content = m.get("content")
-            if content and not m.get("isSpam"):
+            if content and not m.get("isSpam") and not _SPAM_PATTERN.search(content):
                 posts_raw.append({
                     "text": content, "username": m.get("username") or "?",
                     "likeCount": int(m.get("likeCount", 0) or 0),

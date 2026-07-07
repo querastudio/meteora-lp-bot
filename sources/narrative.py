@@ -446,14 +446,6 @@ def evaluate_narrative(name: str, symbol: str, mint: str = "") -> Dict[str, Any]
 
     keyword = _pick_keyword(name, symbol)
     category = detect_category(name, symbol)
-    # TEMPORARY: log name/symbol/keyword/category mentah -- verifikasi
-    # laporan user (kategori "animal" utk $SAPIJIJU, kelihatan salah) perlu
-    # lihat field name ASLI on-chain dulu sebelum diputuskan ini bug regex
-    # atau nama token itu sendiri emang menyesatkan (di luar kendali kita).
-    log.info(
-        "DEBUG kategori/keyword utk mint %s...: name=%r symbol=%r -> keyword=%r kategori=%r",
-        mint[:6] if mint else "?", name, symbol, keyword, category,
-    )
 
     trends = google_trends_signal(keyword)
     youtube = youtube_signal(keyword)
