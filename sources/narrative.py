@@ -419,28 +419,43 @@ def evaluate_narrative(name: str, symbol: str, mint: str = "") -> Dict[str, Any]
     pumpfun = pumpfun_community.community_signal(mint)
 
     # --- BREADTH: berapa dari 5 platform yang menunjukkan aktivitas nyata ---
-    active_flags = [
-        trends.get("available") and trends.get("rising"),
-        youtube.get("available") and youtube.get("video_count", 0) >= config.NARRATIVE_MIN_YOUTUBE_VIDEOS,
-        reddit.get("available") and reddit.get("post_count", 0) >= config.NARRATIVE_MIN_REDDIT_POSTS,
-        news.get("available") and news.get("article_count", 0) >= config.NARRATIVE_MIN_NEWS_ARTICLES,
-        pumpfun.get("available") and pumpfun.get("post_count", 0) >= config.NARRATIVE_MIN_PUMPFUN_POSTS,
+    # pump.fun community BUKAN cuma "kanal ke-5" setara -- ini platform resmi
+    # launchpad-nya sendiri (alternatif X Community, dikonfirmasi user dari
+    # network request pump.fun langsung), jadi diprioritaskan sbg BASE narasi
+    # lewat bobot lebih tinggi (config.NARRATIVE_PUMPFUN_PRIORITY_WEIGHT,
+    # default 2x) drpd kanal generik (Trends/YouTube/Reddit/News yg cuma
+    # text-search, bisa nyasar/noise). Token WELL-ESTABLISHED (community
+    # sudah ramai lama) otomatis dpt breadth/volume tinggi dari sini duluan;
+    # token BARU yg dev/komunitasnya blm sempat buat community sama sekali
+    # cuma dpt available=False -- degrade netral spt kanal lain, TIDAK
+    # dihukum (lihat channels_blind di bawah).
+    pf_weight = config.NARRATIVE_PUMPFUN_PRIORITY_WEIGHT
+    flag_weights = [
+        (bool(trends.get("available") and trends.get("rising")), 1.0),
+        (bool(youtube.get("available") and youtube.get("video_count", 0) >= config.NARRATIVE_MIN_YOUTUBE_VIDEOS), 1.0),
+        (bool(reddit.get("available") and reddit.get("post_count", 0) >= config.NARRATIVE_MIN_REDDIT_POSTS), 1.0),
+        (bool(news.get("available") and news.get("article_count", 0) >= config.NARRATIVE_MIN_NEWS_ARTICLES), 1.0),
+        (bool(pumpfun.get("available") and pumpfun.get("post_count", 0) >= config.NARRATIVE_MIN_PUMPFUN_POSTS), pf_weight),
     ]
-    breadth_score = sum(1 for f in active_flags if f) / len(active_flags)
+    active_flags = [f for f, _ in flag_weights]  # dipakai insight "aktif di N/5 platform"
+    total_weight = sum(w for _, w in flag_weights)
+    breadth_score = sum(w for f, w in flag_weights if f) / total_weight
 
-    # --- VOLUME: angka mentah dinormalisasi (kuantitatif) ---
-    vol_parts: List[float] = []
+    # --- VOLUME: angka mentah dinormalisasi (kuantitatif), pump.fun bobot 2x ---
+    vol_parts: List[tuple] = []
     if trends.get("available"):
-        vol_parts.append(_norm(trends.get("avg", 0.0), 100.0))
+        vol_parts.append((_norm(trends.get("avg", 0.0), 100.0), 1.0))
     if youtube.get("available"):
-        vol_parts.append(_norm(youtube.get("total_views", 0), config.NARRATIVE_YOUTUBE_VIEWS_CAP))
+        vol_parts.append((_norm(youtube.get("total_views", 0), config.NARRATIVE_YOUTUBE_VIEWS_CAP), 1.0))
     if reddit.get("available") and reddit.get("post_count", 0) > 0:
-        vol_parts.append(_norm(reddit.get("total_score", 0), config.NARRATIVE_REDDIT_SCORE_CAP))
+        vol_parts.append((_norm(reddit.get("total_score", 0), config.NARRATIVE_REDDIT_SCORE_CAP), 1.0))
     if news.get("available"):
-        vol_parts.append(_norm(news.get("article_count", 0), config.NARRATIVE_NEWS_ARTICLES_CAP))
+        vol_parts.append((_norm(news.get("article_count", 0), config.NARRATIVE_NEWS_ARTICLES_CAP), 1.0))
     if pumpfun.get("available") and pumpfun.get("post_count", 0) > 0:
-        vol_parts.append(_norm(pumpfun.get("total_likes", 0), config.NARRATIVE_PUMPFUN_LIKES_CAP))
-    volume_score = sum(vol_parts) / len(vol_parts) if vol_parts else 0.0
+        vol_parts.append((_norm(pumpfun.get("total_likes", 0), config.NARRATIVE_PUMPFUN_LIKES_CAP), pf_weight))
+    volume_score = (
+        sum(v * w for v, w in vol_parts) / sum(w for _, w in vol_parts) if vol_parts else 0.0
+    )
 
     # --- DIVERSITAS KOMUNITAS: proxy kualitatif "banyak komunitas/variasi" ---
     div_parts: List[float] = []
@@ -453,15 +468,18 @@ def evaluate_narrative(name: str, symbol: str, mint: str = "") -> Dict[str, Any]
     diversity_score = sum(div_parts) / len(div_parts) if div_parts else 0.0
 
     # --- DAYA TAHAN: masih hidup setelah beberapa hari, bukan cuma spike ---
-    dur_parts: List[float] = []
+    # (pump.fun jg dpt bobot 2x, konsisten dgn breadth/volume di atas)
+    dur_parts: List[tuple] = []
     if trends.get("available"):
-        dur_parts.append(1.0 if trends.get("sustained") else 0.2)
+        dur_parts.append((1.0 if trends.get("sustained") else 0.2, 1.0))
     if reddit.get("available") and reddit.get("post_count", 0) > 0:
         # masih ada post BARU 24 jam terakhir dalam window 7 hari -> msh hidup.
-        dur_parts.append(1.0 if reddit.get("posts_last24h", 0) > 0 else 0.3)
+        dur_parts.append((1.0 if reddit.get("posts_last24h", 0) > 0 else 0.3, 1.0))
     if pumpfun.get("available") and pumpfun.get("post_count", 0) > 0:
-        dur_parts.append(1.0 if pumpfun.get("posts_last24h", 0) > 0 else 0.3)
-    durability_score = sum(dur_parts) / len(dur_parts) if dur_parts else 0.0
+        dur_parts.append((1.0 if pumpfun.get("posts_last24h", 0) > 0 else 0.3, pf_weight))
+    durability_score = (
+        sum(v * w for v, w in dur_parts) / sum(w for _, w in dur_parts) if dur_parts else 0.0
+    )
 
     # --- Skor komposit (dipakai scoring.py, bobot "narrative") ---
     score = (

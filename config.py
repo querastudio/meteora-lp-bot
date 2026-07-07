@@ -177,6 +177,11 @@ PUMPFUN_COMMUNITY_API_KEY = os.getenv("PUMPFUN_COMMUNITY_API_KEY", "")
 PUMPFUN_COMMUNITY_ENABLED = _env_bool("PUMPFUN_COMMUNITY_ENABLED", True)
 NARRATIVE_MIN_PUMPFUN_POSTS = _env_int("NARRATIVE_MIN_PUMPFUN_POSTS", 5)
 NARRATIVE_PUMPFUN_LIKES_CAP = _env_float("NARRATIVE_PUMPFUN_LIKES_CAP", 500)
+# Platform RESMI launchpad pump.fun (bukan sekadar kanal text-search generik
+# spt Reddit/YouTube/News) -- diprioritaskan sbg BASE narasi via bobot lebih
+# tinggi di breadth/volume/durability (lihat narrative.py). Token
+# well-established (community sudah ramai lama) otomatis unggul di sini duluan.
+NARRATIVE_PUMPFUN_PRIORITY_WEIGHT = _env_float("NARRATIVE_PUMPFUN_PRIORITY_WEIGHT", 2.0)
 
 # --- Sintesis narasi via Gemini API gratis (opsional, HANYA soft-nudge) ---
 # Klasifikasi organik/campuran/terkoordinasi dari kutipan Reddit/News yang
@@ -201,6 +206,10 @@ GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 # ramai", ini ukur "cukup bersih utk diminta opini AI").
 AI_MIN_REDDIT_POSTS = _env_int("AI_MIN_REDDIT_POSTS", 2)
 AI_MIN_NEWS_ARTICLES = _env_int("AI_MIN_NEWS_ARTICLES", 3)
+# Chat pump.fun -- gate TERPISAH (OR dgn 2 di atas), krn bukti dari komunitas
+# resmi platform sendiri sudah cukup jadi alasan panggil AI walau Reddit/News
+# masih tipis (token baru wajar blm sempat viral di sana).
+AI_MIN_PUMPFUN_POSTS = _env_int("AI_MIN_PUMPFUN_POSTS", 3)
 
 # --- LunarCrush (opsional, BERBAYAR ~$24/bln) -- Galaxy Score/sentiment X ---
 # TIDAK meng-index token super baru (dikonfirmasi manual) -- wajar 404 utk
