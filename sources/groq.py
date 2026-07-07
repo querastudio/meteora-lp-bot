@@ -37,7 +37,7 @@ def assess_narrative(
     vwap: Dict[str, Any],
     jup: Dict[str, Any],
 ) -> Dict[str, Any]:
-    """Return { available, authenticity, thesis, score_multiplier } -- lihat gemini.py."""
+    """Return { available, authenticity, meme_context, thesis, score_multiplier } -- lihat gemini.py."""
     out = ai_common.empty_result()
     if not config.GROQ_NARRATIVE_ENABLED or not config.GROQ_API_KEY:
         return out
@@ -52,7 +52,7 @@ def assess_narrative(
             "messages": [{"role": "user", "content": prompt}],
             "response_format": {"type": "json_object"},
             "temperature": 0.2,
-            "max_tokens": 200,
+            "max_tokens": 320,
         }
         headers = {"Authorization": f"Bearer {config.GROQ_API_KEY}"}
         resp = http.post_json(URL, json_body=body, headers=headers, timeout=config.HTTP_TIMEOUT)

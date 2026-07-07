@@ -114,6 +114,10 @@ def build_sample_ctx() -> dict:
         },
         "ai": {
             "available": True, "authenticity": "organik",
+            "meme_context": (
+                f"${symbol} mengangkat tema hewan lucu viral ala Pepe -- komunitasnya di chat pump.fun "
+                "ramai bikin varian meme baru tiap hari, momentumnya ikut gelombang narasi 'animal coin' terbaru."
+            ),
             "thesis": (
                 "Fee/TVL sehat dan volume tahan bareng distribusi holder wajar -- kombinasi ini "
                 "cocok utk LP pasif jangka menengah, narasi komunitas juga tampak organik lintas platform."
