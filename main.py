@@ -199,8 +199,11 @@ def _process_candidate(pool: Dict[str, Any], st: Dict[str, Any], sol_price: floa
     # authenticity.
     reddit_cnt = nar.get("reddit", {}).get("post_count", 0)
     news_cnt = nar.get("news", {}).get("article_count", 0)
+    pumpfun_cnt = nar.get("pumpfun", {}).get("post_count", 0)
     has_enough_evidence = (
-        reddit_cnt >= config.AI_MIN_REDDIT_POSTS or news_cnt >= config.AI_MIN_NEWS_ARTICLES
+        reddit_cnt >= config.AI_MIN_REDDIT_POSTS
+        or news_cnt >= config.AI_MIN_NEWS_ARTICLES
+        or pumpfun_cnt >= config.AI_MIN_PUMPFUN_POSTS
     )
 
     nar_ai = {}
@@ -210,8 +213,8 @@ def _process_candidate(pool: Dict[str, Any], st: Dict[str, Any], sol_price: floa
             nar_ai = groq.assess_narrative(symbol, nar.get("category", "unknown"), nar, lp, vol, hold, vwap, jup)
     else:
         log.info(
-            "$%s: bukti narasi terlalu tipis (reddit=%d, news=%d) -- skip AI check",
-            symbol, reddit_cnt, news_cnt,
+            "$%s: bukti narasi terlalu tipis (reddit=%d, news=%d, pumpfun=%d) -- skip AI check",
+            symbol, reddit_cnt, news_cnt, pumpfun_cnt,
         )
     if nar_ai.get("available"):
         nar["score"] = round(nar.get("score", 0.0) * nar_ai["score_multiplier"], 3)
@@ -327,8 +330,11 @@ def analyze_by_mint(mint: str, st: Dict[str, Any], sol_price: float) -> bool:
 
     reddit_cnt = nar.get("reddit", {}).get("post_count", 0)
     news_cnt = nar.get("news", {}).get("article_count", 0)
+    pumpfun_cnt = nar.get("pumpfun", {}).get("post_count", 0)
     has_enough_evidence = (
-        reddit_cnt >= config.AI_MIN_REDDIT_POSTS or news_cnt >= config.AI_MIN_NEWS_ARTICLES
+        reddit_cnt >= config.AI_MIN_REDDIT_POSTS
+        or news_cnt >= config.AI_MIN_NEWS_ARTICLES
+        or pumpfun_cnt >= config.AI_MIN_PUMPFUN_POSTS
     )
     nar_ai = {}
     if has_enough_evidence:
@@ -337,8 +343,8 @@ def analyze_by_mint(mint: str, st: Dict[str, Any], sol_price: float) -> bool:
             nar_ai = groq.assess_narrative(symbol, nar.get("category", "unknown"), nar, lp, vol, hold, vwap, jup)
     else:
         log.info(
-            "$%s (manual): bukti narasi terlalu tipis (reddit=%d, news=%d) -- skip AI check",
-            symbol, reddit_cnt, news_cnt,
+            "$%s (manual): bukti narasi terlalu tipis (reddit=%d, news=%d, pumpfun=%d) -- skip AI check",
+            symbol, reddit_cnt, news_cnt, pumpfun_cnt,
         )
     if nar_ai.get("available"):
         nar["score"] = round(nar.get("score", 0.0) * nar_ai["score_multiplier"], 3)

@@ -31,12 +31,22 @@ AUTHENTICITY_MULTIPLIER = {
 
 
 def build_evidence_block(nar: Dict[str, Any]) -> str:
-    """Rangkai kutipan mentah (judul post/artikel) jadi blok teks berlabel jelas."""
+    """
+    Rangkai kutipan mentah (judul post/artikel/pesan) jadi blok teks berlabel
+    jelas. Kutipan chat pump.fun (platform komunitas RESMI launchpad-nya
+    sendiri, lihat sources/pumpfun_community.py) diikutkan sbg bahan analisis
+    jg -- TETAP diperlakukan sama persis spt Reddit/News: teks ditulis wallet
+    holder ACAK (bukan staf pump.fun), jadi TETAP "kutipan eksternal tak
+    tepercaya" (lihat build_prompt) -- yg dinaikkan cuma bobot KUANTITATIFnya
+    di skor narasi (narrative.py), BUKAN tingkat kepercayaan isinya di sini.
+    """
     parts: List[str] = []
     for p in (nar.get("reddit", {}) or {}).get("top_posts", []) or []:
         parts.append(f"- [Reddit r/{p.get('subreddit','?')}] {p.get('title','')}")
     for a in (nar.get("news", {}) or {}).get("top_articles", []) or []:
         parts.append(f"- [News {a.get('source','?')}] {a.get('title','')}")
+    for m in (nar.get("pumpfun", {}) or {}).get("top_posts", []) or []:
+        parts.append(f"- [Chat pump.fun @{m.get('username','?')}] {m.get('text','')}")
     return "\n".join(parts) if parts else "(tidak ada kutipan tersedia)"
 
 
@@ -74,6 +84,13 @@ def build_context_block(
         f"(breadth={nar.get('breadth_score', 0):.2f}, volume={nar.get('volume_score', 0):.2f}, "
         f"diversitas komunitas={nar.get('diversity_score', 0):.2f})"
     )
+    pf = nar.get("pumpfun", {}) or {}
+    if pf.get("available"):
+        lines.append(
+            f"- Community pump.fun (platform resmi launchpad, diprioritaskan sbg base narasi): "
+            f"{pf.get('post_count', 0)} pesan, {pf.get('member_count', 0)} member, "
+            f"{pf.get('distinct_posters', 0)} wallet unik posting, {pf.get('posts_last24h', 0)} pesan 24 jam terakhir"
+        )
     if vwap.get("available"):
         pos = "di atas" if vwap.get("above_vwap") else "di bawah"
         lines.append(f"- VWAP (sejak pool dibuat): harga {pos} VWAP {abs(vwap.get('ratio_pct', 0)):.0f}%")
