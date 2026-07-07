@@ -105,6 +105,14 @@ def community_signal(mint: str) -> Dict[str, Any]:
         )
 
         msgs_resp = _get(f"/api/v1/communities/{mint}/messages", {"limit": 100, "sort": "time", "order": "desc"})
+        # msgs_resp is None berarti CALL GAGAL (401/403/5xx/network -- lihat
+        # http.request_json, None cuma dikembalikan kalau gagal, BUKAN utk
+        # respons sukses berisi array kosong spt {"messages": []}). Dulu
+        # kegagalan ini disamakan diam2 dgn "community kosong" (rows=[] di
+        # kedua kasus) -- available tetap True dgn semua angka 0, PADAHAL
+        # itu artinya "gagal baca", bukan "genuinely tak ada pesan". Field
+        # ini eksplisit dilacak biar KEDUANYA tak disamakan lagi.
+        messages_call_failed = msgs_resp is None
         rows = _extract_rows(msgs_resp, "messages", "data", "items", "results")
         if msgs_resp and not rows:
             log.info(
@@ -118,7 +126,26 @@ def community_signal(mint: str) -> Dict[str, Any]:
             )
 
         members_resp = _get(f"/api/v1/communities/{mint}/members", {"limit": 100})
+        members_call_failed = members_resp is None
         member_rows = _extract_rows(members_resp, "members", "data", "items", "results")
+
+        if messages_call_failed and members_call_failed:
+            # Community-nya ADA (getCommunity sukses), tapi getMessages &
+            # getMembers keduanya gagal (mis. 401 walau x-api-key sama persis
+            # dgn yg dipakai getCommunity -- indikasi scope/permission/plan
+            # API key blm mengizinkan baca pesan/member, BUKAN bug di sini).
+            # JANGAN laporkan available=True dgn semua angka 0 -- itu akan
+            # kebaca "community sepi" padahal sebenarnya "kita gagal baca".
+            # Degrade ke unavailable spy narrative.py netral, BUKAN salah
+            # nganggep token ini sepi komunitas.
+            log.warning(
+                "PumpfunCommunity: community ADA utk mint %s... tapi getMessages & getMembers "
+                "GAGAL (401/error) walau getCommunity sukses dgn key yg sama -- kemungkinan "
+                "scope/permission API key blm izinkan baca pesan/member, cek dashboard "
+                "coincommunities.org (bkn bug kode). Degrade ke unavailable.",
+                mint[:6],
+            )
+            return out
 
         now = datetime.now(timezone.utc).timestamp()
         posters = set()
