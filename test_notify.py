@@ -89,6 +89,11 @@ def build_sample_ctx() -> dict:
         ],
         "evidence": [
             {
+                "text": f"{symbol} to the moon lfg",
+                "source": "Chat pump.fun @degen123 (42 like)",
+                "url": "",
+            },
+            {
                 "text": f"{symbol} community growing fast, new memes every day",
                 "source": "Reddit r/CryptoMoonShots (1800 upvote)",
                 "url": "https://reddit.com/r/example/1",
