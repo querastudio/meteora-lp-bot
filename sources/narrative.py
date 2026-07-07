@@ -59,6 +59,12 @@ _NARRATIVE_PATTERNS = [
     ("bags", r"\b(bags?|money|rich|wealth|gold)\b"),
     ("news", r"\b(news|breaking|update)\b"),
     ("animal", r"\b(dog|cat|frog|pepe|shib|inu|bonk|wif)\b"),
+    # "Italian brainrot"/Gen-Z internet meme family (2024-2026 wave) --
+    # ditambah krn ketahuan meleset di kasus nyata $TripleT ("Tung Tung
+    # Tung Sahur", meme brainrot viral lintas platform tapi ticker-nya tak
+    # mengandung kata kunci apa pun dari meme aslinya, jadi lolos sbg
+    # "unknown" tanpa pattern ini).
+    ("brainrot", r"\b(tung|sahur|skibidi|rizz|sigma|gyat|fanum|ohio|brainrot|bombardiro|tralalero)\b"),
 ]
 
 
@@ -379,6 +385,35 @@ def _norm(value: float, cap: float) -> float:
     return max(0.0, min(value / cap, 1.0))
 
 
+def _pick_keyword(name: str, symbol: str) -> str:
+    """
+    Pilih kata kunci pencarian narasi (Trends/YouTube/Reddit/News).
+
+    Kasus nyata yg ketahuan salah (dilaporkan user, token $TripleT): nama
+    ASLI on-chain-nya "Tung Tung Tung Sahur" -- meme "Italian brainrot"
+    yg viral lintas platform (X/TikTok/YouTube/IG/FB, dipakai banyak
+    akun besar) -- tapi logic lama SELALU pakai symbol (ticker singkat,
+    "TripleT") drpd name kalau symbol >=3 karakter. "TripleT" TAK ADA
+    HUBUNGANNYA dgn frasa yg orang cari beneran, jadi Trends/YouTube/
+    Reddit/News keliru kelihatan sepi -- token dinilai "SEDANG/SESAAT"
+    padahal aslinya sangat viral, cuma krn search keyword-nya salah.
+
+    Fix: nama on-chain MULTI-KATA (>=2 kata) yg beda dari symbol lebih
+    mungkin FRASA asli yg orang cari (spt "Tung Tung Tung Sahur",
+    "dogwifhat", dst) drpd ticker singkat -- prioritaskan itu. Kalau name
+    cuma 1 kata / sama dgn symbol / kosong, symbol (kalau valid) tetap
+    dipakai spt sebelumnya (banyak meme SATU KATA emang persis symbol-nya,
+    mis. $PEPE/$WIF/$BONK).
+    """
+    name = (name or "").strip()
+    symbol = (symbol or "").strip()
+    if len(name.split()) >= 2 and name.lower() != symbol.lower():
+        return name
+    if symbol and len(symbol) >= 3 and symbol != "?":
+        return symbol
+    return name
+
+
 def evaluate_narrative(name: str, symbol: str, mint: str = "") -> Dict[str, Any]:
     """
     Gabungkan semua sinyal jadi dua sumbu terpisah + rincian kuantitatif mentah
@@ -409,7 +444,7 @@ def evaluate_narrative(name: str, symbol: str, mint: str = "") -> Dict[str, Any]
     if not config.NARRATIVE_ENABLED:
         return empty
 
-    keyword = symbol if symbol and len(symbol) >= 3 and symbol != "?" else name
+    keyword = _pick_keyword(name, symbol)
     category = detect_category(name, symbol)
 
     trends = google_trends_signal(keyword)
