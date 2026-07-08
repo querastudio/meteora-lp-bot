@@ -10,7 +10,7 @@ Pesan pakai HTML parse mode Telegram (aman & rapi di mobile).
 
 import html
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 from urllib.parse import quote_plus
 
 import config
@@ -73,36 +73,152 @@ def _fmt_price(p: float) -> str:
     return s + "0" if s.endswith(".") else s
 
 
-def _ath_line(ath_info: Dict[str, Any]) -> str:
-    """
-    Label status ATH SELALU tampil (permintaan eksplisit user, "metrik ATH
-    itu sangat penting") -- bukan cuma muncul kondisional saat True spt
-    sblmnya (waktu itu token BARU spt $KINS jadi tak py baris ATH sama
-    sekali, terlihat kayak fitur-nya hilang).
-    """
-    if not ath_info:
-        return ""
+# ---------------------------------------------------------------------------
+# RINGKASAN SINYAL — 6 pilar, tiap pilar dpt 1 label kategorikal
+# (BAGUS/LUMAYAN/KURANG/BERBAHAYA), bukan puluhan baris angka mentah.
+# Permintaan eksplisit user: notif auto terlalu overwhelming, cukup verdict
+# per pilar -- detail angka lengkap tetap ada di format_manual_message()
+# (analisa on-demand) buat yg mau deep-dive.
+# ---------------------------------------------------------------------------
+_SCORE_EMOJI = {"bagus": "🟢", "lumayan": "🟡", "kurang": "🟠", "berbahaya": "🔴"}
+
+
+def _score_ath(ath_info: Dict[str, Any]) -> Tuple[str, str]:
+    ath_info = ath_info or {}
     if ath_info.get("is_new_ath"):
-        return "🎯 <b>ATH BARU</b> — harga baru saja tembus rekor tertinggi!"
+        return "bagus", "baru saja cetak ATH baru"
     if ath_info.get("is_fresh"):
         candles = ath_info.get("candle_count", 0)
-        age_txt = f"~{candles} hari" if candles else "blm ada candle GMGN"
-        return f"🆕 <i>Token fresh (umur {age_txt}) — blm ada ATH lama utk dibandingkan</i>"
+        return "lumayan", f"token fresh (umur ~{candles} hari), blm ada ATH lama utk pembanding"
     stored_ath = ath_info.get("stored_ath", 0) or 0
     current = ath_info.get("current_price", 0) or 0
     pct = (current / stored_ath * 100.0) if stored_ath > 0 else 0.0
-    confirm_txt = "" if ath_info.get("gmgn_confirmed") else " <i>(blm terkonfirmasi GMGN run ini)</i>"
-    return f"📊 Blm ATH baru — harga skrg {pct:.0f}% dari ATH tercatat (${_fmt_price(stored_ath)}){confirm_txt}"
+    ath_txt = f"${_fmt_price(stored_ath)}"
+    if pct >= 80:
+        return "lumayan", f"{pct:.0f}% dari ATH tercatat ({ath_txt})"
+    if pct >= 40:
+        return "kurang", f"{pct:.0f}% dari ATH tercatat ({ath_txt}) -- sudah turun banyak"
+    return "berbahaya", f"cuma {pct:.0f}% dari ATH tercatat ({ath_txt}) -- crash jauh dari puncak"
 
 
-def _lp_lock_emoji(gm_sec: Dict[str, Any]) -> str:
-    """LP-lock emoji dari data ASLI GMGN (bukan ⚠️ statis spt dulu -- lihat hard_filters.lp_lock_warning)."""
-    lp_locked = (gm_sec or {}).get("lp_locked")
-    if lp_locked is True:
-        return f"✅ {gm_sec.get('lp_lock_pct', 0):.0f}%"
+def _score_volume(vol_organic: Dict[str, Any], jup: Dict[str, Any], top100: Dict[str, Any]) -> Tuple[str, str]:
+    vol_organic = vol_organic or {}
+    jup = jup or {}
+    top100 = top100 or {}
+    wash = top100.get("wash_trader_pct", 0.0) if top100.get("available") else 0.0
+    passed = vol_organic.get("pass", True)
+    label = jup.get("organic_label") if jup.get("available") else None
+    ratio = vol_organic.get("ratio_actual")
+    ratio_txt = f"rasio mcap:fee {ratio:,.0f}:1" if ratio is not None else "rasio mcap:fee n/a"
+    if wash >= 30:
+        return "berbahaya", f"wash-trading terdeteksi tinggi ({wash:.0f}% top100)"
+    if not passed:
+        return "kurang", f"{ratio_txt}, di luar target organik"
+    if label == "high" and wash < 10:
+        return "bagus", f"Jupiter organic score tinggi, {ratio_txt}"
+    if label in ("high", "medium"):
+        return "lumayan", f"Jupiter organic score {label}, {ratio_txt}"
+    return "lumayan", ratio_txt
+
+
+def _score_narrative(nar: Dict[str, Any]):
+    nar = nar or {}
+    viral = nar.get("viral_label", "")
+    durability = nar.get("durability_label", "")
+    if viral == "OFF" or not viral:
+        return None
+    if durability.startswith("SESAAT"):
+        return "berbahaya", "narasi durasi sesaat -- waspada pump lalu mati"
+    if viral in ("🔥 SANGAT VIRAL", "VIRAL") and durability == "TAHAN LAMA":
+        return "bagus", f"{viral} & {durability.lower()}"
+    if viral.startswith("❔") or durability.startswith("❔"):
+        return "kurang", "data narasi terlalu tipis, cek manual X"
+    if viral == "LEMAH":
+        return "kurang", "sinyal viralitas lemah"
+    return "lumayan", f"{viral} / daya tahan {durability.lower()}"
+
+
+def _score_community(nar: Dict[str, Any], lc: Dict[str, Any]) -> Tuple[str, str]:
+    nar = nar or {}
+    ai = nar.get("ai", {})
+    auth = ai.get("authenticity") if ai.get("available") else None
+    reddit = nar.get("reddit", {}) or {}
+    pf = nar.get("pumpfun", {}) or {}
+    yt = nar.get("youtube", {}) or {}
+    nw = nar.get("news", {}) or {}
+    sources_active = sum(1 for s in (reddit, pf, yt, nw, lc or {}) if (s or {}).get("available"))
+    recent = (reddit.get("posts_last24h", 0) or 0) > 0 or (pf.get("posts_last24h", 0) or 0) > 0
+    if auth == "terkoordinasi":
+        return "berbahaya", "AI mendeteksi diskusi komunitas terkoordinasi/bot-driven"
+    if auth == "organik" and sources_active >= 2:
+        extra = ", msh ada post 24j" if recent else ""
+        return "bagus", f"organik, aktif di {sources_active} sumber{extra}"
+    if sources_active >= 2 or auth == "campuran":
+        note = " (campuran organik/bot)" if auth == "campuran" else ""
+        return "lumayan", f"aktif di {sources_active} sumber{note}"
+    if sources_active >= 1:
+        return "kurang", f"sinyal komunitas tipis (cuma {sources_active} sumber)"
+    return "kurang", "data komunitas minim/tak terukur"
+
+
+def _score_supply(h: Dict[str, Any], top100: Dict[str, Any]) -> Tuple[str, str]:
+    h = h or {}
+    top100 = top100 or {}
+    coord = h.get("coordination_label") if h.get("available") else None
+    scam_risk = top100.get("scam_risk_pct", 0.0) if top100.get("available") else 0.0
+    bc = top100.get("bundler_cluster") or {}
+    bc_score = bc.get("score", 0.0) if bc.get("available") else 0.0
+    if coord == "TINGGI" or scam_risk >= 50 or bc_score >= 70:
+        return "berbahaya", "indikasi bundling/cluster terkoordinasi kuat"
+    if coord == "SEDANG" or scam_risk >= 25 or bc_score >= 40:
+        return "kurang", "ada indikasi cluster/bundling, perlu waspada"
+    if coord == "WAJAR" and scam_risk < 10 and bc_score < 25:
+        return "bagus", "distribusi wajar, tak ada indikasi bundling kuat"
+    return "lumayan", "distribusi cukup wajar, sebagian sinyal blm jelas"
+
+
+def _score_contract(sec: Dict[str, Any], gm_sec: Dict[str, Any]) -> Tuple[str, str]:
+    sec = sec or {}
+    gm_sec = gm_sec or {}
+    no_mint = sec.get("mint_authority") is None
+    no_freeze = sec.get("freeze_authority") is None
+    tax_pct = (sec.get("transfer_fee_bps", 0) or 0) / 100.0
+    no_tax = tax_pct <= config.MAX_TRANSFER_FEE_BPS / 100
+    hp = gm_sec.get("is_honeypot")
+    lp_locked = gm_sec.get("lp_locked")
+    if hp is True or not no_mint or not no_freeze:
+        return "berbahaya", "mint/freeze authority aktif atau honeypot terdeteksi"
+    if not no_tax:
+        return "kurang", f"transfer tax {tax_pct:.1f}%"
     if lp_locked is False:
-        return "❌ TIDAK terkunci"
-    return "⚠️ n/a"
+        return "kurang", "LP TIDAK terkunci"
+    if lp_locked is True and hp is False:
+        return "bagus", f"no-mint/no-freeze/no-tax, LP terkunci {gm_sec.get('lp_lock_pct', 0):.0f}%"
+    return "lumayan", "no-mint/no-freeze/no-tax, LP-lock blm terkonfirmasi"
+
+
+def _pillar_lines(ctx: Dict[str, Any]) -> List[str]:
+    """6 pilar inti (permintaan eksplisit user) -- tiap pilar 1 baris,
+    label kategorikal BAGUS/LUMAYAN/KURANG/BERBAHAYA + alasan ringkas."""
+    gm = ctx.get("gmgn", {}) or {}
+    pillars = [
+        ("ATH (cetak rekor harga)", _score_ath(ctx.get("ath_info", {}))),
+        ("Volume tinggi & organik", _score_volume(
+            ctx.get("vol_organic", {}), ctx.get("jupiter", {}), gm.get("top100", {})
+        )),
+        ("Narasi hype & awet", _score_narrative(ctx.get("narrative", {}))),
+        ("Komunitas organik & aktif", _score_community(ctx.get("narrative", {}), ctx.get("lunarcrush", {}))),
+        ("Distribusi supply wajar", _score_supply(ctx.get("holders", {}), gm.get("top100", {}))),
+        ("Kontrak aman", _score_contract(ctx.get("security", {}), gm.get("security", {}))),
+    ]
+    lines = ["📋 <b>RINGKASAN SINYAL</b>"]
+    for name, result in pillars:
+        if result is None:
+            continue
+        level, detail = result
+        emoji = _SCORE_EMOJI.get(level, "⚪")
+        lines.append(f"{emoji} <b>{name}</b>: {level.upper()} — {detail}")
+    return lines
 
 
 # ---------------------------------------------------------------------------
@@ -110,114 +226,32 @@ def _lp_lock_emoji(gm_sec: Dict[str, Any]) -> str:
 # ---------------------------------------------------------------------------
 def format_message(ctx: Dict[str, Any]) -> str:
     """
-    ctx berisi semua hasil stage. Rakit pesan scannable.
-    Field yang dipakai: verdict, score, symbol, mint, pool, metrics, pool_data,
-    security, holders, lp, vol, narrative, warnings, links.
+    Notif AUTO (hasil screening lolos semua hard gate) -- diringkas jadi
+    verdict per-6-pilar (permintaan eksplisit user: format lama kepanjangan
+    & overwhelming di HP). Detail angka lengkap per-metrik (VWAP, Fee/TVL,
+    breakdown GMGN top100, evidence quotes, dst.) TIDAK dihapus dari sistem,
+    cuma dipindah ke format_manual_message() (kirim CA ke bot = deep-dive
+    on-demand) supaya notif auto tetap scannable dlm 5 detik.
     """
     v = ctx["verdict"]
     emoji = VERDICT_EMOJI.get(v, "⚪")
     sym = html.escape(ctx["symbol"])
-    m = ctx["metrics"]
     p = ctx["pool_data"]
-    sec = ctx["security"]
-    h = ctx["holders"]
-    lp = ctx["lp"]
-    vol = ctx["vol"]
-    vwap = ctx.get("vwap", {})
-    lc = ctx.get("lunarcrush", {})
-    jup = ctx.get("jupiter", {})
-    nar = ctx["narrative"]
     links = ctx["links"]
     warns: List[str] = ctx.get("warnings", [])
-    gm_sec = ctx.get("gmgn", {}).get("security", {})
 
     lines: List[str] = []
     lines.append(f"{emoji} <b>{v} — ${sym}</b>  <i>({ctx['score']:.0f}/100)</i>")
-    ath_line = _ath_line(ctx.get("ath_info", {}))
-    if ath_line:
-        lines.append(ath_line)
     lines.append(f"Pool: {_link(p['name'] or 'Meteora', links['Meteora'])}")
     lines.append("")
-
-    # HARD GATES
-    lines.append("📊 <b>HARD GATES</b> (otomatis)")
-    lines.append(
-        f"─ MCap ${_h(m['market_cap'])} {_yn(True)} | Vol24h ${_h(m['volume_h24'])} {_yn(True)}"
-    )
-    lines.append(
-        f"─ TVL ${_h(p['tvl_usd'])} | Bin {p['bin_step']} | Base {p['base_fee_pct']}% | "
-        f"Quote {p.get('_quote_symbol','?')} ✅"
-    )
-    lines.extend(_volume_organic_lines(ctx.get("vol_organic", {}), p.get("_cum_fee_sol", 0)))
-    tax_pct = (sec.get('transfer_fee_bps', 0) or 0) / 100.0
-    lines.append(
-        f"─ no-mint {_yn(sec.get('mint_authority') is None)} "
-        f"no-freeze {_yn(sec.get('freeze_authority') is None)} "
-        f"no-tax {_yn(tax_pct <= config.MAX_TRANSFER_FEE_BPS/100)} "
-        f"LP-lock {_lp_lock_emoji(gm_sec)}"
-    )
-    if h.get("available"):
-        lines.append(f"─ Top10: {h['top10_pct']}% {_yn(h['top10_gate_pass'])}")
-        coord = h.get("coordination_label", "n/a")
-        coord_emoji = {"TINGGI": "🔴", "SEDANG": "🟡", "WAJAR": "✅"}.get(coord, "")
-        lines.append(f"─ Indikasi coordinated trading: {coord_emoji} {coord}")
-        cluster_pct = h.get("largest_cluster_pct", 0.0)
-        cluster_n = h.get("largest_cluster_wallets", 0)
-        if cluster_n >= 2:
-            lines.append(
-                f"─ Cluster terbesar: {cluster_pct}% supply / {cluster_n} wallet "
-                f"{_yn(h.get('cluster_gate_pass', True))} <i>(proxy waktu, bukan exact spt GMGN)</i>"
-            )
-        else:
-            lines.append("─ Cluster: tak terdeteksi wallet berdekatan ✅")
-    else:
-        lines.append("─ Holder: data tak tersedia ⚠️")
-    if jup.get("available"):
-        label = jup.get("organic_label") or "?"
-        jup_emoji = {"high": "✅", "medium": "🟡", "low": "🔴"}.get(label, "")
-        lines.append(
-            f"─ Jupiter Organic Score: {jup.get('organic_score',0):.0f}/100 "
-            f"({label}) {jup_emoji} <i>(volume asli vs bot/wash-trading)</i>"
-        )
-    lines.extend(_gmgn_lines(ctx.get("gmgn", {})))
+    lines.extend(_pillar_lines(ctx))
     lines.append("")
 
-    # KUALITAS LP
-    lines.append("💰 <b>KUALITAS LP</b>")
-    fee_flag = "✅" if lp["fee_tvl_daily_pct"] >= config.FEE_TVL_DAILY_GOOD_PCT else "⚠️"
-    vol_flag = "✅" if lp["vol_tvl"] >= config.VOL_TVL_GOOD_RATIO else "⚠️"
-    est = " (est)" if lp.get("fee_estimated") else ""
-    lines.append(
-        f"─ Fee/TVL harian: {lp['fee_tvl_daily_pct']}%{est} {fee_flag} | "
-        f"Vol/TVL: {lp['vol_tvl']}× {vol_flag}"
-    )
-    lines.append(f"─ Volatilitas: {vol['note']} {'✅' if not vol['vertical_death'] else '🔴'}")
-    if vwap.get("available"):
-        pct = vwap.get("ratio_pct", 0.0)
-        pos = "di atas" if vwap.get("above_vwap") else "di bawah"
-        flag = "✅" if vwap.get("above_vwap") else "⚠️"
-        extreme = " (ekstrem, waspada blow-off-top)" if pct > 200 else ""
-        lines.append(
-            f"─ VWAP (1j, sejak pool dibuat): harga {pos} VWAP {abs(pct):.0f}% {flag}{extreme}"
-        )
-    else:
-        lines.append("─ VWAP: n/a")
-    lines.append(f"─ Konsentrasi LP: {'sehat ✅' if lp['lp_conc_score']>=0.7 else 'sedang ⚠️'} (est)")
-    if lp.get("pool_age_hours") is not None:
-        lines.append(f"─ Umur pool: {lp['pool_age_hours']:.0f} jam")
-    lines.append("")
-
-    # NARASI — dipecah 2 sumbu: VIRALITAS (breadth+volume+diversitas komunitas)
-    # vs DAYA TAHAN (masih hidup beberapa hari, bukan cuma spike sesaat).
-    lines.extend(_narrative_lines(nar, lc, links, sym))
-
-    # Warnings ringkas
     if warns:
         lines.append("⚠️ <b>CATATAN:</b> " + "; ".join(html.escape(x) for x in warns[:4]))
         lines.append("")
 
-    # LINK VERIFIKASI MANUAL
-    lines.append("🔗 <b>VERIFIKASI MANUAL</b> (klik):")
+    lines.append("🔗 <b>VERIFIKASI MANUAL</b> (klik) — kirim CA ini ke bot utk analisa lengkap:")
     order = [
         "GMGN", "Bubblemaps", "DevsNightmare", "Deepnets", "RugCheck", "SolScan",
         "pump.fun", "X search", "TikTok", "Instagram",
@@ -515,9 +549,6 @@ def format_manual_message(ctx: Dict[str, Any]) -> str:
         f"🔍 <b>HASIL ANALISA MANUAL — ${sym}</b>  "
         f"<i>(skor {ctx['score']:.0f}/100, verdict internal {ctx['verdict']})</i>"
     )
-    ath_line = _ath_line(ctx.get("ath_info", {}))
-    if ath_line:
-        lines.append(ath_line)
     lines.append(
         "<i>Hard gate ditampilkan apa adanya (bisa gagal) -- ini bukan hasil "
         "auto-screening yang sudah difilter, jadi baca ⚠️/❌ dgn cermat.</i>"
@@ -526,6 +557,10 @@ def format_manual_message(ctx: Dict[str, Any]) -> str:
         lines.append(f"Pool: {_link(pool.get('name') or 'Meteora', links.get('Meteora',''))}")
     else:
         lines.append("Pool Meteora: tak ditemukan (token mungkin tak nge-LP di Meteora DLMM)")
+    lines.append("")
+    lines.extend(_pillar_lines(ctx))
+    lines.append("")
+    lines.append("── detail lengkap di bawah ──")
     lines.append("")
 
     lines.append("📊 <b>HARD GATES</b>")
