@@ -338,13 +338,123 @@ _SCAM_PATTERN_TAGS = {
     "fresh_wallet": "fresh_pct",
 }
 
+# Sample minimum spy coefficient-of-variation bermakna (di bawah ini, noise
+# dari sample kecil terlalu besar utk disimpulkan apa-apa).
+_BUNDLER_MIN_SAMPLE = 5
 
-def top100_cluster_analysis(mint: str, chain: str = "sol") -> Dict[str, Any]:
+
+def _coeff_variation(values: List[float]) -> Optional[float]:
+    """Coefficient of variation (stddev/|mean|) -- None kalau sample/mean tak layak."""
+    n = len(values)
+    if n < _BUNDLER_MIN_SAMPLE:
+        return None
+    mean = sum(values) / n
+    if mean == 0:
+        return None
+    variance = sum((v - mean) ** 2 for v in values) / n
+    return (variance ** 0.5) / abs(mean)
+
+
+def _uniformity_signal(cv: Optional[float]) -> Optional[float]:
+    """
+    cv=0 (semua wallet PERSIS sama) -> 1.0 (indikasi bundler kuat).
+    cv>=0.5 (variasi wajar antar wallet independen) -> 0.0 (organik).
+    Ambang 0.5 dipilih longgar SENGAJA -- distribusi holder organik nyata
+    (saldo/umur/harga beli macam-macam) biasanya CV jauh > 0.5; wallet yg
+    dibuat/didanai/dibeli bareng-bareng (bundler) biasanya CV << 0.5.
+    """
+    if cv is None:
+        return None
+    return max(0.0, min(1.0, 1.0 - cv / 0.5))
+
+
+def _bundler_cluster_signal(
+    sol_bal_usd: List[float],
+    wallet_age_days: List[float],
+    buy_mc_usd: List[float],
+    remaining_pct: List[float],
+    holding_days: List[float],
+    funding_counter: Dict[str, int],
+    funding_n: int,
+) -> Dict[str, Any]:
+    """
+    Gabungkan 6 heuristik user (SOL balance/wallet age/bought avg mc/
+    remaining supply/funding source/holding duration) jadi 1 skor 0-100 +
+    label. Prinsip: independen/organik = VARIASI TINGGI antar wallet;
+    bundler/koordinasi = wallet-wallet itu "kembar" -- saldo, umur, harga
+    beli, % supply, lama hold SAMA/mirip, dan/atau banyak yg didanai dari
+    SATU alamat yg sama (funding source) -- funding_counter dari
+    native_transfer.from_address, tracing ASLI GMGN, bukan proxy.
+
+    5 metrik numerik pakai coefficient-of-variation (lihat _uniformity_signal);
+    funding source pakai % wallet yg berbagi SATU funding address terbanyak
+    (butuh >=2 wallet berbagi drpd noise 1 wallet kebetulan).
+
+    INFORMASIONAL SAJA (skor 0-100 ditampilkan, tak menyentuh hard gate/skor
+    LP) -- konsisten dgn semua sinyal GMGN top100 lain di modul ini; ini
+    murni statistik pendekatan (bukan funding-source tracing PER-PASANGAN
+    ala GMGN skill resmi yg trace SETIAP wallet lawan SETIAP wallet lain),
+    jadi TETAP disarankan cross-check manual via link Bubblemaps/GMGN utk
+    kasus yg skornya tinggi.
+    """
+    out = {
+        "available": False, "score": 0.0, "label": "n/a",
+        "sample_count": 0,
+        "signals": {
+            "sol_balance": None, "wallet_age": None, "bought_avg_mc": None,
+            "remaining_supply": None, "holding_duration": None, "funding_source": None,
+        },
+        "top_funding_share_pct": 0.0, "top_funding_wallet_count": 0,
+    }
+    signals: Dict[str, Optional[float]] = {
+        "sol_balance": _uniformity_signal(_coeff_variation(sol_bal_usd)),
+        "wallet_age": _uniformity_signal(_coeff_variation(wallet_age_days)),
+        "bought_avg_mc": _uniformity_signal(_coeff_variation(buy_mc_usd)),
+        "remaining_supply": _uniformity_signal(_coeff_variation(remaining_pct)),
+        "holding_duration": _uniformity_signal(_coeff_variation(holding_days)),
+        "funding_source": None,
+    }
+    if funding_n >= 2 and funding_counter:
+        top_addr, top_count = max(funding_counter.items(), key=lambda kv: kv[1])
+        if top_count >= 2:
+            share = top_count / funding_n
+            signals["funding_source"] = share
+            out["top_funding_share_pct"] = round(share * 100.0, 1)
+            out["top_funding_wallet_count"] = top_count
+
+    out["signals"] = {k: (round(v, 2) if v is not None else None) for k, v in signals.items()}
+    available_signals = [v for v in signals.values() if v is not None]
+    # Butuh minimal 2 dari 6 sinyal punya cukup data -- sesuai prinsip
+    # "channels_blind" yg sudah dipakai di narrative.py: satu sinyal noise
+    # kecil tak boleh menyimpulkan apa-apa sendirian.
+    if len(available_signals) < 2:
+        return out
+
+    score = sum(available_signals) / len(available_signals) * 100.0
+    out["available"] = True
+    out["score"] = round(score, 1)
+    out["sample_count"] = len(available_signals)
+    if score >= 70:
+        out["label"] = "🔴 INDIKASI KUAT bundler/koordinasi"
+    elif score >= 40:
+        out["label"] = "🟡 indikasi SEDANG bundler/koordinasi"
+    else:
+        out["label"] = "✅ variasi wajar (organik)"
+    return out
+
+
+def top100_cluster_analysis(
+    mint: str,
+    market_cap_usd: float = 0.0,
+    price_usd: float = 0.0,
+    sol_price: float = 0.0,
+    chain: str = "sol",
+) -> Dict[str, Any]:
     """
     Return { available, sample_count, coverage_pct, scam_risk_pct,
              fresh_pct, wash_trader_pct, sandwich_bot_pct, bundler_pct,
-             rat_trader_pct, is_new_pct, is_suspicious_pct } (tiap _pct
-             punya pasangan _count).
+             rat_trader_pct, is_new_pct, is_suspicious_pct, bundler_cluster }
+             (tiap _pct punya pasangan _count).
 
     Fitur "Top 100 Holders Analysis" SUNGGUHAN spt skill resmi GMGN (beda
     dari top_holder_tags() yg cuma count level-token dari wallet_tags_stat)
@@ -372,7 +482,15 @@ def top100_cluster_analysis(mint: str, chain: str = "sol") -> Dict[str, Any]:
     scam_risk_pct = MAX dari semua kategori individual (bukan dijumlah,
     supaya tak double-count wallet yg sama kena >1 tag) -- dipakai sbg
     sinyal ringkas "seberapa parah pola scam di top-100 token ini".
+
+    bundler_cluster: 6 heuristik STATISTIK per permintaan user eksplisit
+    (SOL balance/wallet age/bought avg mc/remaining supply/funding source/
+    holding duration) -- lihat _bundler_cluster_signal(). market_cap_usd/
+    price_usd/sol_price WAJIB diisi (dari Dexscreener/harga SOL yg sudah
+    diambil main.py) supaya "bought avg mc" bisa dihitung; tanpa itu
+    bundler_cluster.available=False (bukan crash, degrade sbg biasa).
     """
+    price_now_sol = (price_usd / sol_price) if sol_price > 0 else 0.0
     out: Dict[str, Any] = {
         "available": False, "sample_count": 0, "coverage_pct": 0.0,
         "scam_risk_pct": 0.0,
@@ -392,37 +510,24 @@ def top100_cluster_analysis(mint: str, chain: str = "sol") -> Dict[str, Any]:
         if not rows:
             return out
 
-        # TEMPORARY: log skema mentah BEBERAPA baris -- perlu verifikasi field
-        # asli utk fitur bundler-cluster BARU (permintaan user: analisa SOL
-        # balance/wallet age/bought avg mc/remaining supply/funding source/
-        # holding duration per-wallet, ala tab TOP100 GMGN web). Cuma
-        # amount_percentage/tags/is_new/is_suspicious yg sudah dikonfirmasi
-        # dipakai; field lain (mis. native_balance/start_holding_at/avg_cost/
-        # native_transfer.from_address) MUNCUL di respons tp BELUM pasti
-        # maknanya -- verifikasi pertama (rows[0]) ternyata addr_type=2
-        # exchange="pump_amm" (alamat POOL AMM, bukan wallet trader manusia
-        # -- semua field trading/cost/funding-nya nol/kosong, TAK
-        # representatif). Log rows[0] + 1 baris NON-pool (addr_type != 2)
-        # supaya ada contoh wallet trader asli sblm implementasi heuristik.
-        if isinstance(rows[0], dict):
-            log.info(
-                "GMGN top100 RAW holder rows[0] utk mint %s...: %s",
-                mint[:6], rows[0],
-            )
-        non_pool = next(
-            (r for r in rows[1:] if isinstance(r, dict) and r.get("addr_type") != 2), None
-        )
-        if non_pool:
-            log.info(
-                "GMGN top100 RAW holder non-pool utk mint %s...: %s",
-                mint[:6], non_pool,
-            )
-
         tag_counter: Dict[str, int] = {}
         tag_pct: Dict[str, float] = {k: 0.0 for k in _SCAM_PATTERN_TAGS}
         tag_n: Dict[str, int] = {k: 0 for k in _SCAM_PATTERN_TAGS}
         new_pct = susp_pct = coverage = 0.0
         new_n = susp_n = 0
+        # -- Bundler-cluster (6 heuristik, per permintaan user, dari baris
+        # WALLET ASLI saja -- addr_type==0. addr_type!=0 (verified live:
+        # addr_type=2 exchange="pump_amm" = alamat POOL AMM, semua field
+        # trading/funding-nya nol/kosong) DIKECUALIKAN, akan mencemari
+        # analisa krn bukan wallet manusia. Lihat _bundler_cluster_signal().
+        sol_bal_usd_list: List[float] = []
+        wallet_age_days_list: List[float] = []
+        buy_mc_usd_list: List[float] = []
+        remaining_pct_list: List[float] = []
+        holding_days_list: List[float] = []
+        funding_counter: Dict[str, int] = {}
+        funding_n = 0
+        now_ts = time.time()
         for h in rows:
             if not isinstance(h, dict):
                 continue
@@ -442,6 +547,27 @@ def top100_cluster_analysis(mint: str, chain: str = "sol") -> Dict[str, Any]:
                 susp_pct += pct
                 susp_n += 1
 
+            if h.get("addr_type") == 0:
+                remaining_pct_list.append(pct)
+                try:
+                    sol_bal_usd_list.append(float(h.get("native_balance", 0) or 0) / 1e9 * sol_price)
+                except (TypeError, ValueError):
+                    pass
+                created_at = h.get("created_at")
+                if created_at:
+                    wallet_age_days_list.append((now_ts - float(created_at)) / 86400.0)
+                start_h = h.get("start_holding_at")
+                if start_h:
+                    end_h = h.get("end_holding_at") or now_ts
+                    holding_days_list.append((float(end_h) - float(start_h)) / 86400.0)
+                avg_cost = h.get("avg_cost")
+                if avg_cost and price_now_sol > 0 and market_cap_usd > 0:
+                    buy_mc_usd_list.append(market_cap_usd * (float(avg_cost) / price_now_sol))
+                from_addr = ((h.get("native_transfer") or {}).get("from_address") or "").strip()
+                if from_addr:
+                    funding_counter[from_addr] = funding_counter.get(from_addr, 0) + 1
+                    funding_n += 1
+
         for tag_name, pct_key in _SCAM_PATTERN_TAGS.items():
             out[pct_key] = round(tag_pct[tag_name], 1)
             out[pct_key.replace("_pct", "_count")] = tag_n[tag_name]
@@ -454,6 +580,14 @@ def top100_cluster_analysis(mint: str, chain: str = "sol") -> Dict[str, Any]:
         out["scam_risk_pct"] = round(max(
             [out[k] for k in _SCAM_PATTERN_TAGS.values()] + [new_pct, susp_pct]
         ), 1)
+        out["bundler_cluster"] = _bundler_cluster_signal(
+            sol_bal_usd_list, wallet_age_days_list, buy_mc_usd_list,
+            remaining_pct_list, holding_days_list, funding_counter, funding_n,
+        )
+        log.info(
+            "GMGN bundler_cluster utk mint %s...: %s",
+            mint[:6], out["bundler_cluster"],
+        )
 
         log.info(
             "GMGN top100 tag distribution (semua %d baris) utk mint %s...: %s",
