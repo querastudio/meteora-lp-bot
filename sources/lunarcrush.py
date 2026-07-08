@@ -33,6 +33,19 @@ log = logging.getLogger("lunarcrush")
 
 BASE = "https://lunarcrush.com/api4/public"
 
+# Circuit breaker per-run: live log konfirmasi LunarCrush rate-limited
+# (daily/minute) SEPANJANG run -- tiap kandidat retry penuh (default 3x
+# retry + backoff, ~9 detik) padahal hasilnya PASTI gagal lagi (limit tak
+# reset di tengah run). Setelah gagal SEKALI, skip sisa kandidat run ini
+# tanpa panggil API sama sekali -- reset_run() dipanggil main.py tiap run
+# baru mulai (limit bisa reset di run berikutnya).
+_exhausted_this_run = False
+
+
+def reset_run() -> None:
+    global _exhausted_this_run
+    _exhausted_this_run = False
+
 
 def social_signal(symbol: str) -> Dict[str, Any]:
     """
@@ -47,17 +60,28 @@ def social_signal(symbol: str) -> Dict[str, Any]:
         "num_contributors": 0, "num_posts": 0, "interactions_24h": 0,
         "social_score": 0.5,
     }
+    global _exhausted_this_run
     if not config.LUNARCRUSH_ENABLED or not config.LUNARCRUSH_API_KEY:
         return out
     if not symbol or symbol == "?":
+        return out
+    if _exhausted_this_run:
         return out
     try:
         topic = f"${symbol.lower()}"
         url = f"{BASE}/topic/{topic}/v1"
         headers = {"Authorization": f"Bearer {config.LUNARCRUSH_API_KEY}"}
-        resp = http.get_json(url, headers=headers, timeout=config.HTTP_TIMEOUT)
+        # max_retries=0: kalau gagal, jangan buang waktu retry di SINI --
+        # kalau alasannya 429 (lihat status di bawah), circuit breaker yg
+        # cegah KANDIDAT BERIKUTNYA coba lagi sepanjang run ini (limit
+        # daily/minute tak reset di tengah run, retry cuma buang waktu).
+        resp, status = http.get_json_with_status(url, headers=headers, timeout=config.HTTP_TIMEOUT, max_retries=0)
+        if status == 429:
+            # Rate limit (daily/minute) berlaku global, BUKAN token-spesifik --
+            # aman diasumsikan kandidat lain jg bakal kena, skip sisa run.
+            _exhausted_this_run = True
         if not resp:
-            return out  # 404 (belum ter-index) atau API gagal -- wajar, degrade
+            return out  # 404 (token blm ter-index) atau gagal lain -- wajar, degrade
         data = resp.get("data") or {}
         if not data:
             return out

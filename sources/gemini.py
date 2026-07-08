@@ -72,6 +72,8 @@ def assess_narrative(
     hold: Dict[str, Any],
     vwap: Dict[str, Any],
     jup: Dict[str, Any],
+    vol_organic: Dict[str, Any] = None,
+    is_new_ath: bool = False,
 ) -> Dict[str, Any]:
     """
     Return { available, authenticity, meme_context, thesis, score_multiplier }.
@@ -84,7 +86,7 @@ def assess_narrative(
         return out
 
     evidence = ai_common.build_evidence_block(nar)
-    context = ai_common.build_context_block(lp, vol, hold, nar, vwap, jup)
+    context = ai_common.build_context_block(lp, vol, hold, nar, vwap, jup, vol_organic, is_new_ath)
     prompt = ai_common.build_prompt(symbol, category, evidence, context)
 
     try:

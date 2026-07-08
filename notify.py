@@ -86,6 +86,8 @@ def format_message(ctx: Dict[str, Any]) -> str:
 
     lines: List[str] = []
     lines.append(f"{emoji} <b>{v} — ${sym}</b>  <i>({ctx['score']:.0f}/100)</i>")
+    if ctx.get("is_new_ath"):
+        lines.append("🎯 <b>ATH BARU</b> — harga baru saja tembus rekor tertinggi!")
     lines.append(f"Pool: {_link(p['name'] or 'Meteora', links['Meteora'])}")
     lines.append("")
 
@@ -98,7 +100,7 @@ def format_message(ctx: Dict[str, Any]) -> str:
         f"─ TVL ${_h(p['tvl_usd'])} | Bin {p['bin_step']} | Base {p['base_fee_pct']}% | "
         f"Quote {p.get('_quote_symbol','?')} ✅"
     )
-    lines.append(f"─ Global fee {p.get('_cum_fee_sol', 0)} SOL ✅")
+    lines.extend(_volume_organic_lines(ctx.get("vol_organic", {}), p.get("_cum_fee_sol", 0)))
     tax_pct = (sec.get('transfer_fee_bps', 0) or 0) / 100.0
     lines.append(
         f"─ no-mint {_yn(sec.get('mint_authority') is None)} "
@@ -283,6 +285,26 @@ def _narrative_lines(nar: Dict[str, Any], lc: Dict[str, Any], links: Dict[str, s
     return lines
 
 
+def _volume_organic_lines(vol_organic: Dict[str, Any], cum_fee_sol: float) -> List[str]:
+    """
+    Blok "Volume Organik & Tinggi" (permintaan eksplisit user) -- rasio
+    mcap:fee kumulatif vs target sehat ~10.000:1 (lihat
+    hard_filters.stage2_volume_organic). Degrade ke tampilan lama (fee mentah
+    tanpa evaluasi rasio) kalau vol_organic kosong (mis. dari kode lama/test).
+    """
+    vol_organic = vol_organic or {}
+    if not vol_organic:
+        return [f"─ Global fee {cum_fee_sol} SOL"]
+    ratio = vol_organic.get("ratio_actual")
+    ratio_txt = f"{ratio:,.0f}:1" if ratio is not None else "n/a"
+    ok = vol_organic.get("pass", True)
+    return [
+        f"─ Volume Organik: fee {vol_organic.get('actual_fee_sol', cum_fee_sol)} SOL "
+        f"(target {vol_organic.get('expected_fee_sol', 0)} SOL, rasio mcap:fee {ratio_txt}) "
+        f"{_yn(ok)}"
+    ]
+
+
 def _gmgn_lines(gm: Dict[str, Any]) -> List[str]:
     """
     Blok GMGN OpenAPI (dipakai format_message & format_manual_message --
@@ -318,8 +340,14 @@ def _gmgn_lines(gm: Dict[str, Any]) -> List[str]:
         else:
             mom_emoji, mom_txt = "", ""
         mom_suffix = f" {mom_emoji} <i>({mom_txt})</i>" if mom_txt else ""
+        if v5 >= config.VOLUME_5M_HIGH_USD:
+            level_emoji = "🔥"
+        elif v5 >= config.VOLUME_5M_DECENT_USD:
+            level_emoji = "🟡"
+        else:
+            level_emoji = ""
         lines.append(
-            f"─ GMGN Momentum: 5m ${_h(vol5.get('volume_5m',0))}{mom_suffix} | "
+            f"─ GMGN Momentum: 5m ${_h(vol5.get('volume_5m',0))}{level_emoji}{mom_suffix} | "
             f"1m ${_h(vol5.get('volume_1m',0))} | 1h ${_h(vol5.get('volume_1h',0))} "
             f"({vol5.get('swaps_5m',0)} swap/5m)"
         )
@@ -417,6 +445,8 @@ def format_manual_message(ctx: Dict[str, Any]) -> str:
         f"🔍 <b>HASIL ANALISA MANUAL — ${sym}</b>  "
         f"<i>(skor {ctx['score']:.0f}/100, verdict internal {ctx['verdict']})</i>"
     )
+    if ctx.get("is_new_ath"):
+        lines.append("🎯 <b>ATH BARU</b> — harga baru saja tembus rekor tertinggi!")
     lines.append(
         "<i>Hard gate ditampilkan apa adanya (bisa gagal) -- ini bukan hasil "
         "auto-screening yang sudah difilter, jadi baca ⚠️/❌ dgn cermat.</i>"
@@ -441,7 +471,7 @@ def format_manual_message(ctx: Dict[str, Any]) -> str:
             f"─ TVL ${_h(pool.get('tvl_usd', 0))} | Bin {pool.get('bin_step','?')} | "
             f"Base {pool.get('base_fee_pct','?')}% | Quote {pool.get('_quote_symbol','?')}"
         )
-        lines.append(f"─ Global fee {pool.get('_cum_fee_sol', 0)} SOL")
+        lines.extend(_volume_organic_lines(ctx.get("vol_organic", {}), pool.get("_cum_fee_sol", 0)))
     else:
         lines.append("─ TVL / Bin / Fee pool: n/a (bukan pool Meteora)")
     tax_pct = (sec.get("transfer_fee_bps", 0) or 0) / 100.0

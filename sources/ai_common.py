@@ -64,6 +64,8 @@ def build_context_block(
     nar: Dict[str, Any],
     vwap: Dict[str, Any],
     jup: Dict[str, Any],
+    vol_organic: Dict[str, Any] = None,
+    is_new_ath: bool = False,
 ) -> str:
     """
     Rangkai metrik TERUKUR (angka hasil hitungan kita sendiri, BUKAN teks
@@ -106,6 +108,17 @@ def build_context_block(
             f"- Jupiter Organic Score: {jup.get('organic_score', 0):.0f}/100 "
             f"({jup.get('organic_label', '?')}) -- legitimasi volume asli vs bot/wash-trading"
         )
+    vol_organic = vol_organic or {}
+    if vol_organic:
+        ratio = vol_organic.get("ratio_actual")
+        ratio_txt = f"{ratio:,.0f}:1" if ratio is not None else "n/a"
+        lines.append(
+            f"- Volume vs mcap (rasio mcap:fee kumulatif, target sehat "
+            f"~{vol_organic.get('ratio_target', 10000):,.0f}:1): {ratio_txt} "
+            f"({'SEHAT' if vol_organic.get('pass') else 'DI BAWAH target -- volume blm sepadan mcap'})"
+        )
+    if is_new_ath:
+        lines.append("- Harga BARU SAJA mencetak ATH (rekor tertinggi baru) -- momentum breakout genuine")
     return "\n".join(lines)
 
 

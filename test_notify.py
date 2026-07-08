@@ -136,6 +136,10 @@ def build_sample_ctx() -> dict:
         },
     }
     warnings = ["LP-lock belum terverifikasi otomatis — cek manual"]
+    vol_organic = {
+        "pass": True, "expected_fee_sol": 61.0, "actual_fee_sol": 32.4,
+        "ratio_actual": 18827, "ratio_target": 10_000,
+    }
 
     links = notify.build_manual_links(mint, pool_addr, symbol)
 
@@ -157,6 +161,8 @@ def build_sample_ctx() -> dict:
         "narrative": narrative,
         "warnings": warnings,
         "links": links,
+        "vol_organic": vol_organic,
+        "is_new_ath": True,
     }
 
 
