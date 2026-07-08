@@ -130,7 +130,7 @@ def _process_candidate(pool: Dict[str, Any], st: Dict[str, Any], sol_price: floa
     gm_ath = gmgn.ath_price(mint)
     is_new_ath = state_mod.update_ath(
         st, mint, metrics["price_usd"],
-        gm_ath.get("ath_price_usd", 0.0) if gm_ath.get("available") else 0.0,
+        gm_ath.get("ath_price_usd", 0.0), gm_ath.get("available", False),
     )
 
     # ---- STAGE 3: keamanan kontrak (Helius) — paling kritis ----
@@ -204,6 +204,12 @@ def _process_candidate(pool: Dict[str, Any], st: Dict[str, Any], sol_price: floa
     gm_holders = gmgn.top_holder_tags(mint)
     gm_top100 = gmgn.top100_cluster_analysis(mint, metrics["market_cap"], metrics["price_usd"], sol_price)
     warnings.extend(gm_sec.get("flags", []))
+    # LP-lock: pakai data ASLI GMGN drpd warning generik yg dulu SELALU
+    # muncul (bikin STRONG praktis mustahil krn DOWNGRADE_ON_WARN) -- lihat
+    # hard_filters.lp_lock_warning().
+    lp_warn = hard_filters.lp_lock_warning(gm_sec)
+    if lp_warn:
+        warnings.append(lp_warn)
 
     # ---- Sintesis AI (opsional -- lihat sources/gemini.py & ai_common.py) ----
     # authenticity: nudge nar['score'] dlm rentang 0.6-1.0x dari kutipan
@@ -366,7 +372,7 @@ def analyze_by_mint(mint: str, st: Dict[str, Any], sol_price: float) -> bool:
     gm_ath = gmgn.ath_price(mint)
     is_new_ath = state_mod.update_ath(
         st, mint, metrics["price_usd"],
-        gm_ath.get("ath_price_usd", 0.0) if gm_ath.get("available") else 0.0,
+        gm_ath.get("ath_price_usd", 0.0), gm_ath.get("available", False),
     )
 
     gm_sec = gmgn.token_security(mint)
@@ -374,6 +380,12 @@ def analyze_by_mint(mint: str, st: Dict[str, Any], sol_price: float) -> bool:
     gm_holders = gmgn.top_holder_tags(mint)
     gm_top100 = gmgn.top100_cluster_analysis(mint, metrics["market_cap"], metrics["price_usd"], sol_price)
     warnings.extend(gm_sec.get("flags", []))
+    # LP-lock: pakai data ASLI GMGN drpd warning generik yg dulu SELALU
+    # muncul (bikin STRONG praktis mustahil krn DOWNGRADE_ON_WARN) -- lihat
+    # hard_filters.lp_lock_warning().
+    lp_warn = hard_filters.lp_lock_warning(gm_sec)
+    if lp_warn:
+        warnings.append(lp_warn)
 
     reddit_cnt = nar.get("reddit", {}).get("post_count", 0)
     news_cnt = nar.get("news", {}).get("article_count", 0)

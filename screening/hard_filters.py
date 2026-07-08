@@ -11,7 +11,7 @@ audit bisa menjelaskan token gugur di gate mana.
 """
 
 import logging
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import config
 
@@ -131,13 +131,11 @@ def stage2_volume_organic(mcap_usd: float, cum_fee_sol: float) -> Dict[str, Any]
 # ---------------------------------------------------------------------------
 def stage3_security(sec: Dict[str, Any]) -> Tuple[bool, List[str], List[str]]:
     """
-    Cek keamanan kontrak. Return (passed, hard_reasons, warnings).
+    Cek keamanan kontrak (Helius SAJA -- LP-lock BUKAN di sini lagi, lihat
+    lp_lock_warning() di bawah). Return (passed, hard_reasons, warnings).
 
     Hard SKIP jika: mint_authority != null, freeze_authority != null,
     atau transfer fee > MAX_TRANSFER_FEE_BPS.
-
-    LP-lock tak bisa diverifikasi 100% gratis -> jadi WARNING (⚠️), bukan hard
-    gate; scoring akan menurunkan skor & notif menandai perlu cek manual.
     """
     hard: List[str] = []
     warn: List[str] = []
@@ -155,8 +153,26 @@ def stage3_security(sec: Dict[str, Any]) -> Tuple[bool, List[str], List[str]]:
     if fee_bps > config.MAX_TRANSFER_FEE_BPS:
         hard.append(f"transfer tax {fee_bps/100:.2f}% > {config.MAX_TRANSFER_FEE_BPS/100:.2f}%")
 
-    # LP-lock: tak terverifikasi otomatis -> selalu tandai perlu cek manual.
-    warn.append("LP-lock belum terverifikasi otomatis — cek manual")
-
     passed = len(hard) == 0
     return passed, hard, warn
+
+
+def lp_lock_warning(gm_sec: Dict[str, Any]) -> Optional[str]:
+    """
+    LP-lock warning, SEKARANG pakai data ASLI GMGN (gmgn.token_security()'s
+    lp_locked/lp_lock_pct) drpd warning generik yg dulu SELALU muncul tanpa
+    syarat di stage3_security() -- akibatnya STRONG praktis mustahil
+    tercapai (DOWNGRADE_ON_WARN selalu memicu krn warning itu ada di SETIAP
+    token, terlepas keadaan sebenarnya). GMGN dipanggil SETELAH Stage 3 di
+    pipeline (lihat main.py), jadi fungsi ini dipanggil terpisah begitu
+    gm_sec tersedia, bukan di dalam stage3_security().
+
+    None = tak perlu warning (GMGN konfirmasi TERKUNCI) -- ini yg
+    memungkinkan verdict STRONG akhirnya bisa tercapai.
+    """
+    lp_locked = gm_sec.get("lp_locked") if gm_sec else None
+    if lp_locked is True:
+        return None
+    if lp_locked is False:
+        return "LP-lock TIDAK terkunci menurut GMGN — risiko rug tinggi, cek manual"
+    return "LP-lock belum terverifikasi otomatis (GMGN n/a) — cek manual"

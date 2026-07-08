@@ -333,7 +333,15 @@ HTTP_BACKOFF_BASE = _env_float("HTTP_BACKOFF_BASE", 1.5)  # detik
 # MAX_EXPENSIVE_CANDIDATES di bawah.
 MAX_POOLS_PER_RUN = _env_int("MAX_POOLS_PER_RUN", 300)
 # Batasi kandidat yang lolos Stage 1-2 masuk ke stage mahal (Helius) per run.
-MAX_EXPENSIVE_CANDIDATES = _env_int("MAX_EXPENSIVE_CANDIDATES", 15)
+# Naik dari 15 -> 25 (permintaan user, 8 Juli 2026): Stage 1 rutin meloloskan
+# ~40 pool/run tp cuma 15 teratas yg PERNAH dievaluasi lanjut -- pool
+# peringkat 16-40 tak pernah dicek sama sekali, bukan gugur krn gate, tapi
+# memang tak kebagian giliran. Trade-off: run makin lama (~4-5 menit di 15
+# kandidat, makin banyak makin lama & makin sering nyenggol rate-limit
+# Helius -- lihat sources/http.py penalti adaptif) -- msh aman di bawah
+# timeout 10 menit workflow, tp kalau makin lambat lg, turunkan via env var
+# ini (tak perlu ubah kode).
+MAX_EXPENSIVE_CANDIDATES = _env_int("MAX_EXPENSIVE_CANDIDATES", 25)
 # Anti-spam: interval minimal (jam) sebelum re-notif token yang sama pada verdict sama.
 RENOTIFY_COOLDOWN_HOURS = _env_float("RENOTIFY_COOLDOWN_HOURS", 24.0)
 

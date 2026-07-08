@@ -86,7 +86,11 @@ def get_ath(state: Dict[str, Any], mint: str) -> float:
 
 
 def update_ath(
-    state: Dict[str, Any], mint: str, current_price: float, external_ath: float = 0.0,
+    state: Dict[str, Any],
+    mint: str,
+    current_price: float,
+    external_ath: float = 0.0,
+    external_available: bool = False,
 ) -> bool:
     """
     Update ATH tercatat & return True kalau current_price ini ATH BARU
@@ -97,13 +101,19 @@ def update_ath(
     nyata: baseline ATH yg cuma dari price_history LOKAL kita (dibatasi
     ~1.4 hari @5menit) atau field "ath" basi peninggalan kode lama SALAH
     utk token yg puncak aslinya terjadi SBLM kita mulai pantau -- kasus
-    nyata $NEIL (dilaporkan user, screenshot chart GMGN): badge "ATH BARU"
-    muncul padahal harga jelas jatuh jauh dari puncak asli. external_ath
-    (dari gmgn.ath_price(), MAX(high) candle harian GMGN -- independen dari
-    riwayat lokal kita) dipakai sbg baseline TAMBAHAN, bukan pengganti --
-    kalau external_ath > current_price, current_price BUKAN ATH baru
-    sungguhan, TERLEPAS dari berapa pun "ath" lokal kita sblmnya (yg mgkn
-    keliru krn gap riwayat).
+    nyata $NEIL & $SQUIRE (dilaporkan user, 2x): badge "ATH BARU" muncul
+    padahal harga jelas jatuh jauh dari puncak asli. external_ath (dari
+    gmgn.ath_price(), MAX(high) candle harian GMGN -- independen dari
+    riwayat lokal kita) dipakai sbg baseline TAMBAHAN.
+
+    KONSERVATIF SENGAJA (permintaan user: metrik ATH ini "sangat penting",
+    jangan sampai salah lagi): is_new_ath HANYA True kalau external_ath
+    BERHASIL dikonfirmasi GMGN run ini juga (external_available=True). Kalau
+    panggilan candle GMGN gagal/degrade, JANGAN klaim ATH sama sekali dari
+    riwayat lokal SAJA (persis pola gagal yg 2x kejadian) -- baseline
+    "ath" tersimpan TETAP diupdate pakai data yg ada (spy tak makin basi),
+    tapi flag is_new_ath default False sampai run berikutnya berhasil
+    konfirmasi ulang ke GMGN.
 
     Token BARU PERTAMA KALI tercatat (tok["ath"] blm ada) TIDAK dianggap
     "ATH baru" -- tak ada rekor sblmnya utk "dipecahkan"; baseline langsung
@@ -120,7 +130,12 @@ def update_ath(
         candidates.append(prior_ath)
     new_ath = max(candidates)
 
-    is_new_ath = prior_ath is not None and current_price >= new_ath and current_price > prior_ath
+    is_new_ath = (
+        external_available
+        and prior_ath is not None
+        and current_price >= new_ath
+        and current_price > prior_ath
+    )
     tok["ath"] = new_ath
     return is_new_ath
 
