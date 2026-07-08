@@ -59,6 +59,16 @@ def _yn(ok: bool) -> str:
     return "✅" if ok else "❌"
 
 
+def _lp_lock_emoji(gm_sec: Dict[str, Any]) -> str:
+    """LP-lock emoji dari data ASLI GMGN (bukan ⚠️ statis spt dulu -- lihat hard_filters.lp_lock_warning)."""
+    lp_locked = (gm_sec or {}).get("lp_locked")
+    if lp_locked is True:
+        return f"✅ {gm_sec.get('lp_lock_pct', 0):.0f}%"
+    if lp_locked is False:
+        return "❌ TIDAK terkunci"
+    return "⚠️ n/a"
+
+
 # ---------------------------------------------------------------------------
 # Format pesan
 # ---------------------------------------------------------------------------
@@ -83,6 +93,7 @@ def format_message(ctx: Dict[str, Any]) -> str:
     nar = ctx["narrative"]
     links = ctx["links"]
     warns: List[str] = ctx.get("warnings", [])
+    gm_sec = ctx.get("gmgn", {}).get("security", {})
 
     lines: List[str] = []
     lines.append(f"{emoji} <b>{v} — ${sym}</b>  <i>({ctx['score']:.0f}/100)</i>")
@@ -106,7 +117,7 @@ def format_message(ctx: Dict[str, Any]) -> str:
         f"─ no-mint {_yn(sec.get('mint_authority') is None)} "
         f"no-freeze {_yn(sec.get('freeze_authority') is None)} "
         f"no-tax {_yn(tax_pct <= config.MAX_TRANSFER_FEE_BPS/100)} "
-        f"LP-lock ⚠️"
+        f"LP-lock {_lp_lock_emoji(gm_sec)}"
     )
     if h.get("available"):
         lines.append(f"─ Top10: {h['top10_pct']}% {_yn(h['top10_gate_pass'])}")

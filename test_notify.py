@@ -8,6 +8,7 @@ menyentuh state_data.json, TIDAK menjalankan pipeline nyata.
 """
 
 import logging
+from typing import List
 
 import notify
 
@@ -144,7 +145,12 @@ def build_sample_ctx() -> dict:
             "score_multiplier": 1.0,
         },
     }
-    warnings = ["LP-lock belum terverifikasi otomatis — cek manual"]
+    # Kosong (bukan lagi hardcoded LP-lock warning) -- sample gmgn_data di
+    # atas py lp_locked=True, jadi hard_filters.lp_lock_warning() akan
+    # None-kan warning ini di pipeline nyata (lihat main.py) -- STRONG
+    # akhirnya bisa beneran tampil tanpa downgrade otomatis saat LP
+    # memang terkonfirmasi terkunci.
+    warnings: List[str] = []
     vol_organic = {
         "pass": True, "expected_fee_sol": 61.0, "actual_fee_sol": 32.4,
         "ratio_actual": 18827, "ratio_target": 10_000,
