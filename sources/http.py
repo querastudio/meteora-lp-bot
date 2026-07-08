@@ -37,6 +37,35 @@ _session.headers.update(
 # Throttle per-host: simpan timestamp request terakhir agar tak menembak beruntun.
 _last_call_lock = threading.Lock()
 _last_call: Dict[str, float] = {}
+
+# Penalti adaptif per-host: naik tiap kena 429 (host lagi ketat), meluruh tiap
+# sukses. Alasan: interval statis di _MIN_INTERVAL cukup utk kondisi normal,
+# tapi begitu host mulai 429 (mis. Helius pas run ramai), tiap retry ttp
+# nembak di interval semula -> 429 lagi -> retry lagi, bikin latensi
+# membengkak per kandidat (terlihat live: banyak baris "429 (attempt 0)"
+# beruntun utk mainnet.helius-rpc.com). Naikkan jeda base SEMENTARA stlh 429
+# supaya request BERIKUTNYA (kandidat lain jg, bukan cuma retry ini) lebih
+# jarang nembak, alih-alih terus retry di kecepatan yg sama.
+_penalty_lock = threading.Lock()
+_penalty: Dict[str, float] = {}
+_PENALTY_MAX = 8.0
+_PENALTY_GROWTH = 1.8
+_PENALTY_DECAY = 0.85  # meluruh perlahan tiap sukses, bukan reset instan
+
+
+def _bump_penalty(host: str) -> None:
+    with _penalty_lock:
+        cur = _penalty.get(host, 1.0)
+        _penalty[host] = min(cur * _PENALTY_GROWTH, _PENALTY_MAX)
+
+
+def _decay_penalty(host: str) -> None:
+    with _penalty_lock:
+        cur = _penalty.get(host, 1.0)
+        if cur > 1.0:
+            _penalty[host] = max(cur * _PENALTY_DECAY, 1.0)
+
+
 # Jeda minimal antar-call per host (detik). Dexscreener ~300/min => ~0.2s aman.
 _MIN_INTERVAL = {
     "api.dexscreener.com": 0.25,
@@ -75,6 +104,8 @@ _MIN_INTERVAL = {
 def _throttle(host: str) -> None:
     """Tahan sebentar bila call ke host ini terlalu rapat dengan sebelumnya."""
     interval = _MIN_INTERVAL.get(host, 0.1)
+    with _penalty_lock:
+        interval *= _penalty.get(host, 1.0)
     with _last_call_lock:
         now = time.monotonic()
         prev = _last_call.get(host, 0.0)
@@ -107,9 +138,35 @@ def request_json(
     JANGAN pernah melempar exception ke pemanggil — return None supaya pipeline
     bisa degrade gracefully (satu API mati != seluruh run crash).
     """
+    data, _status = request_json_with_status(
+        method, url, params=params, json_body=json_body, headers=headers,
+        timeout=timeout, max_retries=max_retries,
+    )
+    return data
+
+
+def request_json_with_status(
+    method: str,
+    url: str,
+    *,
+    params: Optional[Dict[str, Any]] = None,
+    json_body: Optional[Dict[str, Any]] = None,
+    headers: Optional[Dict[str, str]] = None,
+    timeout: Optional[int] = None,
+    max_retries: Optional[int] = None,
+) -> "tuple[Optional[Any], Optional[int]]":
+    """
+    Sama spt request_json, tp jg kembalikan status_code HTTP TERAKHIR yg
+    dilihat (None kalau gagal network murni, tanpa respons sama sekali).
+    Dipakai pemanggil yg perlu bedakan alasan gagal (mis. lunarcrush.py:
+    404 "token blm ter-index" beda drpd 429 "rate limit" -- yg pertama
+    token-spesifik, yg kedua berlaku utk SISA run, circuit breaker cuma
+    boleh nyala utk kasus kedua).
+    """
     timeout = timeout or config.HTTP_TIMEOUT
     max_retries = max_retries if max_retries is not None else config.HTTP_MAX_RETRIES
     host = _host_of(url)
+    last_status: Optional[int] = None
 
     for attempt in range(max_retries + 1):
         _throttle(host)
@@ -127,6 +184,7 @@ def request_json(
             _sleep_backoff(attempt)
             continue
 
+        last_status = resp.status_code
         # Rate limited / server error => retry dengan backoff.
         if resp.status_code in (429, 500, 502, 503, 504):
             body = ""
@@ -135,6 +193,8 @@ def request_json(
             except Exception:  # noqa: BLE001
                 pass
             log.warning("HTTP %s %s -> %d (attempt %d) body=%s", method, host, resp.status_code, attempt, body)
+            if resp.status_code == 429:
+                _bump_penalty(host)
             # Hormati Retry-After bila ada.
             retry_after = resp.headers.get("Retry-After")
             if retry_after and retry_after.isdigit():
@@ -159,16 +219,17 @@ def request_json(
                 "HTTP %s %s -> %d (tidak di-retry) server=%s cf-ray=%s cf-mitigated=%s body=%s",
                 method, host, resp.status_code, srv, cfray, cfmit, body,
             )
-            return None
+            return None, resp.status_code
 
+        _decay_penalty(host)
         try:
-            return resp.json()
+            return resp.json(), resp.status_code
         except ValueError:
             log.warning("Respon non-JSON dari %s", host)
-            return None
+            return None, resp.status_code
 
     log.warning("HTTP %s %s menyerah setelah %d percobaan", method, host, max_retries + 1)
-    return None
+    return None, last_status
 
 
 def _sleep_backoff(attempt: int) -> None:
@@ -183,3 +244,7 @@ def get_json(url: str, **kwargs) -> Optional[Any]:
 
 def post_json(url: str, **kwargs) -> Optional[Any]:
     return request_json("POST", url, **kwargs)
+
+
+def get_json_with_status(url: str, **kwargs) -> "tuple[Optional[Any], Optional[int]]":
+    return request_json_with_status("GET", url, **kwargs)

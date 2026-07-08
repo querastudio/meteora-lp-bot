@@ -39,6 +39,10 @@ log = logging.getLogger("main")
 
 def run() -> int:
     log.info("=== Meteora LP screening run mulai ===")
+    # Circuit breaker LunarCrush per-run (lihat sources/lunarcrush.py) --
+    # rate limit daily/minute-nya tak reset di tengah run, tp BISA reset run
+    # berikutnya, jadi wajib di-reset tiap run baru mulai.
+    lunarcrush.reset_run()
     st = state_mod.load()
     sol_price = dexscreener.get_sol_price_usd()
     log.info("Harga SOL: $%.2f", sol_price)
@@ -98,12 +102,27 @@ def _process_candidate(pool: Dict[str, Any], st: Dict[str, Any], sol_price: floa
         return False
 
     symbol = metrics["symbol"]
-    # Catat harga ke riwayat (dipakai Stage 6 utk estimasi volume-tahan-lama).
-    state_mod.record_price(st, mint, metrics["price_usd"], symbol)
+    # Catat harga ke riwayat (dipakai Stage 6 utk estimasi volume-tahan-lama)
+    # & deteksi ATH BARU (harga menembus rekor tertinggi tercatat -- sinyal
+    # momentum genuine breakout, beda dari sekadar "naik dari kemarin").
+    is_new_ath = state_mod.record_price(st, mint, metrics["price_usd"], symbol)
 
     ok2, reasons2 = hard_filters.stage2_token(metrics)
     if not ok2:
         log.info("S2 gugur $%s: %s", symbol, reasons2)
+        return False
+
+    # ---- STAGE 2.5: volume ORGANIK & TINGGI (murah, TANPA Helius) ----
+    # Sengaja ditaruh SEDINI mungkin sblm Stage 3/4 yg mahal & rawan rate
+    # limit (Helius) -- kandidat yg volume-nya tak sepadan mcap-nya digugurkan
+    # DULU di sini, hemat waktu & rate-limit Helius utk kandidat lain yg lebih
+    # layak, sekaligus fast-track token "runner" asli ke notifikasi (permintaan
+    # user: signal secepat mungkin begitu ada token runner volume tinggi).
+    jup = jupiter.organic_score(mint)
+    gm_volume = gmgn.volume_momentum(mint)
+    vol_organic = hard_filters.stage2_volume_organic(metrics["market_cap"], pool.get("_cum_fee_sol", 0.0))
+    if config.VOLUME_ORGANIC_HARD_GATE and not vol_organic["pass"]:
+        log.info("S2.5 gugur $%s: %s", symbol, vol_organic["reason"])
         return False
 
     # ---- STAGE 3: keamanan kontrak (Helius) — paling kritis ----
@@ -166,10 +185,9 @@ def _process_candidate(pool: Dict[str, Any], st: Dict[str, Any], sol_price: floa
     # itu wajar -- degrade gracefully, lihat sources/lunarcrush.py.
     lc = lunarcrush.social_signal(symbol)
 
-    # ---- JUPITER ORGANIC SCORE (gratis) -- penguat deteksi wash-trading ----
-    jup = jupiter.organic_score(mint)
-
     # ---- GMGN (gratis) -- security cross-check, dev holding %, tag holder ----
+    # (volume_momentum sudah dipanggil di Stage 2.5 di atas -- jup & gm_volume
+    # dipakai lagi di sini, bukan dipanggil ulang.)
     # INFORMASIONAL SAJA (tampil di HARD GATES section notif) -- tak menyentuh
     # skor/hard gate, hard gate keamanan/holder tetap otoritatif dari Helius.
     # Lihat sources/gmgn.py.
@@ -177,7 +195,6 @@ def _process_candidate(pool: Dict[str, Any], st: Dict[str, Any], sol_price: floa
     gm_dev = gmgn.dev_holding(mint)
     gm_holders = gmgn.top_holder_tags(mint)
     gm_top100 = gmgn.top100_cluster_analysis(mint)
-    gm_volume = gmgn.volume_momentum(mint)
     warnings.extend(gm_sec.get("flags", []))
 
     # ---- Sintesis AI (opsional -- lihat sources/gemini.py & ai_common.py) ----
@@ -209,9 +226,13 @@ def _process_candidate(pool: Dict[str, Any], st: Dict[str, Any], sol_price: floa
 
     nar_ai = {}
     if has_enough_evidence:
-        nar_ai = gemini.assess_narrative(symbol, nar.get("category", "unknown"), nar, lp, vol, hold, vwap, jup)
+        nar_ai = gemini.assess_narrative(
+            symbol, nar.get("category", "unknown"), nar, lp, vol, hold, vwap, jup, vol_organic, is_new_ath,
+        )
         if not nar_ai.get("available"):
-            nar_ai = groq.assess_narrative(symbol, nar.get("category", "unknown"), nar, lp, vol, hold, vwap, jup)
+            nar_ai = groq.assess_narrative(
+                symbol, nar.get("category", "unknown"), nar, lp, vol, hold, vwap, jup, vol_organic, is_new_ath,
+            )
     else:
         log.info(
             "$%s: bukti narasi terlalu tipis (reddit=%d, news=%d, pumpfun=%d) -- skip AI check",
@@ -222,7 +243,7 @@ def _process_candidate(pool: Dict[str, Any], st: Dict[str, Any], sol_price: floa
     nar["ai"] = nar_ai
 
     # ---- SCORING & VERDICT ----
-    scored = scoring.compute(lp, vol, hold, nar, warnings, vwap, lc, jup)
+    scored = scoring.compute(lp, vol, hold, nar, warnings, vwap, lc, jup, vol_organic, is_new_ath)
     verdict = scored["verdict"]
     log.info("$%s -> %s (skor %.0f) breakdown=%s", symbol, verdict, scored["score"], scored["breakdown"])
 
@@ -253,6 +274,8 @@ def _process_candidate(pool: Dict[str, Any], st: Dict[str, Any], sol_price: floa
         "narrative": nar,
         "warnings": warnings,
         "links": links,
+        "vol_organic": vol_organic,
+        "is_new_ath": is_new_ath,
     }
     text = notify.format_message(ctx)
     if notify.send(text):
@@ -284,7 +307,7 @@ def analyze_by_mint(mint: str, st: Dict[str, Any], sol_price: float) -> bool:
         return False
 
     symbol = metrics["symbol"]
-    state_mod.record_price(st, mint, metrics["price_usd"], symbol)
+    is_new_ath = state_mod.record_price(st, mint, metrics["price_usd"], symbol)
 
     stage2_pass, stage2_reasons = hard_filters.stage2_token(metrics)
 
@@ -322,12 +345,18 @@ def analyze_by_mint(mint: str, st: Dict[str, Any], sol_price: float) -> bool:
 
     lc = lunarcrush.social_signal(symbol)
     jup = jupiter.organic_score(mint)
+    gm_volume = gmgn.volume_momentum(mint)
+    # Analisa manual TAK pernah lewat stage1_pool() (pool ditemukan belakangan,
+    # opsional) -- hitung cum_fee_sol inline drpd pool["_cum_fee_sol"], DAN
+    # tak pernah dijadikan hard gate di sini (filosofi analyze_by_mint: user
+    # sengaja minta lihat token INI, tampilkan apa adanya spt gate lain).
+    cum_fee_sol = (pool.get("cumulative_fee_usd", 0) / sol_price) if pool and sol_price > 0 else 0.0
+    vol_organic = hard_filters.stage2_volume_organic(metrics["market_cap"], cum_fee_sol)
 
     gm_sec = gmgn.token_security(mint)
     gm_dev = gmgn.dev_holding(mint)
     gm_holders = gmgn.top_holder_tags(mint)
     gm_top100 = gmgn.top100_cluster_analysis(mint)
-    gm_volume = gmgn.volume_momentum(mint)
     warnings.extend(gm_sec.get("flags", []))
 
     reddit_cnt = nar.get("reddit", {}).get("post_count", 0)
@@ -340,9 +369,13 @@ def analyze_by_mint(mint: str, st: Dict[str, Any], sol_price: float) -> bool:
     )
     nar_ai = {}
     if has_enough_evidence:
-        nar_ai = gemini.assess_narrative(symbol, nar.get("category", "unknown"), nar, lp, vol, hold, vwap, jup)
+        nar_ai = gemini.assess_narrative(
+            symbol, nar.get("category", "unknown"), nar, lp, vol, hold, vwap, jup, vol_organic, is_new_ath,
+        )
         if not nar_ai.get("available"):
-            nar_ai = groq.assess_narrative(symbol, nar.get("category", "unknown"), nar, lp, vol, hold, vwap, jup)
+            nar_ai = groq.assess_narrative(
+                symbol, nar.get("category", "unknown"), nar, lp, vol, hold, vwap, jup, vol_organic, is_new_ath,
+            )
     else:
         log.info(
             "$%s (manual): bukti narasi terlalu tipis (reddit=%d, news=%d, pumpfun=%d) -- skip AI check",
@@ -352,7 +385,7 @@ def analyze_by_mint(mint: str, st: Dict[str, Any], sol_price: float) -> bool:
         nar["score"] = round(nar.get("score", 0.0) * nar_ai["score_multiplier"], 3)
     nar["ai"] = nar_ai
 
-    scored = scoring.compute(lp, vol, hold, nar, warnings, vwap, lc, jup)
+    scored = scoring.compute(lp, vol, hold, nar, warnings, vwap, lc, jup, vol_organic, is_new_ath)
     log.info(
         "$%s (manual) -> skor %.0f (verdict internal %s) breakdown=%s",
         symbol, scored["score"], scored["verdict"], scored["breakdown"],
@@ -381,6 +414,8 @@ def analyze_by_mint(mint: str, st: Dict[str, Any], sol_price: float) -> bool:
         "stage2_reasons": stage2_reasons,
         "stage3_pass": stage3_pass,
         "stage3_reasons": stage3_reasons,
+        "vol_organic": vol_organic,
+        "is_new_ath": is_new_ath,
     }
     text = notify.format_manual_message(ctx)
     return notify.send(text)

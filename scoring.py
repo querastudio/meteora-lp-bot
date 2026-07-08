@@ -33,6 +33,8 @@ def compute(
     vwap: Dict[str, Any] = None,
     lunarcrush: Dict[str, Any] = None,
     jupiter: Dict[str, Any] = None,
+    vol_organic: Dict[str, Any] = None,
+    is_new_ath: bool = False,
 ) -> Dict[str, Any]:
     """
     Hitung skor & verdict. Return dict:
@@ -43,6 +45,18 @@ def compute(
     vwap = vwap or {}
     lunarcrush = lunarcrush or {}
     jupiter = jupiter or {}
+    vol_organic = vol_organic or {}
+
+    # volume_organic: rasio_target/rasio_actual (makin actual mendekati/di
+    # bawah target 10.000:1 -> makin sehat -> makin dekat 1.0). Kalau data
+    # fee 0 (ratio_actual None), netral 0.5 drpd 0 -- konsisten dgn soft
+    # signal lain yg degrade ke netral, bukan skor terendah, saat data tipis.
+    ratio_actual = vol_organic.get("ratio_actual")
+    ratio_target = vol_organic.get("ratio_target", config.MCAP_TO_FEE_SOL_RATIO)
+    if ratio_actual is None or ratio_actual <= 0:
+        volume_organic_score = 0.5
+    else:
+        volume_organic_score = max(0.0, min(ratio_target / ratio_actual, 1.0))
 
     # Skor per komponen (masing-masing 0-1) x bobot.
     components = {
@@ -56,6 +70,8 @@ def compute(
         "vwap_momentum": vwap.get("momentum_score", 0.5),
         "lunarcrush_social": lunarcrush.get("social_score", 0.5),
         "jupiter_organic": jupiter.get("organic_signal_score", 0.5),
+        "volume_organic": volume_organic_score,
+        "ath_momentum": 1.0 if is_new_ath else 0.5,
     }
 
     weighted = sum(components[k] * w[k] for k in components)

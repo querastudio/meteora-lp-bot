@@ -86,6 +86,39 @@ def stage2_token(metrics: Dict[str, Any]) -> Tuple[bool, List[str]]:
     return ok, reasons
 
 
+def stage2_volume_organic(mcap_usd: float, cum_fee_sol: float) -> Dict[str, Any]:
+    """
+    Rasio "volume ORGANIK & TINGGI" per rumus user: mcap:global_sol_fee sehat
+    ~10.000:1 (mcap $100k <-> 10 SOL fee kumulatif). BEDA dari
+    MIN_CUMULATIVE_FEE_SOL (Stage 1, floor flat) -- ini PROPORSIONAL thdp
+    mcap, jadi adil utk token mcap besar (butuh fee lbh banyak) maupun kecil
+    (floor flat 20 SOL bisa kelonggaran/keketatan salah utk keduanya).
+
+    Return { pass, expected_fee_sol, actual_fee_sol, ratio_actual, reason }.
+    ratio_actual = mcap_usd / cum_fee_sol (makin KECIL makin sehat -- makin
+    dekat/di bawah target rasio 10.000:1-nya).
+    """
+    expected_fee_sol = mcap_usd / config.MCAP_TO_FEE_SOL_RATIO if config.MCAP_TO_FEE_SOL_RATIO > 0 else 0.0
+    min_tolerated = expected_fee_sol / max(config.MCAP_TO_FEE_SOL_TOLERANCE, 1.0)
+    ratio_actual = (mcap_usd / cum_fee_sol) if cum_fee_sol > 0 else float("inf")
+    passed = cum_fee_sol >= min_tolerated
+    reason = ""
+    if not passed:
+        reason = (
+            f"fee {cum_fee_sol:.1f} SOL < {min_tolerated:.1f} SOL yg diharapkan "
+            f"(mcap ${mcap_usd:,.0f} / rasio {config.MCAP_TO_FEE_SOL_RATIO:,.0f}, "
+            f"toleransi {config.MCAP_TO_FEE_SOL_TOLERANCE}x) -- volume blm sepadan mcap"
+        )
+    return {
+        "pass": passed,
+        "expected_fee_sol": round(expected_fee_sol, 1),
+        "actual_fee_sol": round(cum_fee_sol, 1),
+        "ratio_actual": round(ratio_actual, 0) if ratio_actual != float("inf") else None,
+        "ratio_target": config.MCAP_TO_FEE_SOL_RATIO,
+        "reason": reason,
+    }
+
+
 # ---------------------------------------------------------------------------
 # STAGE 3 — KEAMANAN KONTRAK (Helius) — PALING KRITIS
 # ---------------------------------------------------------------------------

@@ -15,6 +15,7 @@ Struktur file:
   "tokens": {
      "<mint>": {
         "price_history": [float,...], # beberapa titik terakhir (capped)
+        "ath": float,                  # harga tertinggi yg pernah tercatat
         "last_verdict": "STRONG"|"WATCH",
         "last_notified_ts": float,    # epoch detik
         "symbol": str
@@ -66,18 +67,39 @@ def save(state: Dict[str, Any]) -> None:
         log.error("Gagal simpan state: %s", e)
 
 
-def record_price(state: Dict[str, Any], mint: str, price: float, symbol: str = "") -> None:
-    """Catat harga terbaru ke riwayat (dipakai Stage 6 utk estimasi volume-tahan-lama)."""
+def record_price(state: Dict[str, Any], mint: str, price: float, symbol: str = "") -> bool:
+    """
+    Catat harga terbaru ke riwayat (dipakai Stage 6 utk estimasi volume-tahan-
+    lama) & update ATH. Return True kalau harga ini ATH BARU (pecahkan
+    rekor tertinggi sebelumnya) -- sinyal momentum bullish yg diminta user
+    ("harga mencetak all time high ini penting"), beda dari sekadar "harga
+    naik" krn nembus level yg BELUM PERNAH dicapai token ini sblmnya, bukan
+    cuma naik dari harga kemarin.
+
+    Token yg BARU PERTAMA KALI tercatat (belum py riwayat/ATH sblmnya) TIDAK
+    dianggap "ATH baru" -- tak ada apa pun utk "dipecahkan", flag itu cuma
+    bermakna kalau ada rekor sblmnya yg beneran ditembus.
+    """
     tok = state["tokens"].setdefault(mint, {"price_history": [], "symbol": symbol})
 
     hist: List[float] = tok.get("price_history", [])
+    prior_ath = tok.get("ath")
+    is_new_ath = False
     if price > 0:
         hist.append(round(price, 12))
         if len(hist) > _MAX_HISTORY:
             hist = hist[-_MAX_HISTORY:]
         tok["price_history"] = hist
+        if prior_ath is not None and price > prior_ath:
+            is_new_ath = True
+        tok["ath"] = max(prior_ath, price) if prior_ath is not None else price
     if symbol:
         tok["symbol"] = symbol
+    return is_new_ath
+
+
+def get_ath(state: Dict[str, Any], mint: str) -> float:
+    return float(state["tokens"].get(mint, {}).get("ath") or 0.0)
 
 
 def get_price_history(state: Dict[str, Any], mint: str) -> List[float]:
@@ -159,6 +181,13 @@ def merge(remote: Dict[str, Any], local: Dict[str, Any]) -> Dict[str, Any]:
             merged_tok["price_history"] = local_tok.get("price_history", [])
         if local_tok.get("symbol"):
             merged_tok["symbol"] = local_tok["symbol"]
+        # ATH: MAX dari kedua sisi, jangan pernah turun (2 run beririsan bisa
+        # lihat harga puncak beda tergantung timing masing2 -- rekor sebenarnya
+        # adalah yg tertinggi dari keduanya).
+        remote_ath = remote_tok.get("ath")
+        local_ath = local_tok.get("ath")
+        if remote_ath is not None or local_ath is not None:
+            merged_tok["ath"] = max(remote_ath or 0.0, local_ath or 0.0)
         if local_tok.get("last_notified_ts", 0) >= remote_tok.get("last_notified_ts", 0):
             if "last_verdict" in local_tok:
                 merged_tok["last_verdict"] = local_tok["last_verdict"]

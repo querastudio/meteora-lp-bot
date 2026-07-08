@@ -392,6 +392,21 @@ def top100_cluster_analysis(mint: str, chain: str = "sol") -> Dict[str, Any]:
         if not rows:
             return out
 
+        # TEMPORARY: log skema mentah baris pertama -- perlu verifikasi field
+        # asli utk fitur bundler-cluster BARU (permintaan user: analisa SOL
+        # balance/wallet age/bought avg mc/remaining supply/funding source/
+        # holding duration per-wallet, ala tab TOP100 GMGN web). Cuma
+        # amount_percentage/tags/is_new/is_suspicious yg sudah dikonfirmasi
+        # dipakai; field lain (mis. sol_balance/wallet_created_at/
+        # avg_cost_usd/funding_from/hold_time) BELUM diverifikasi nama
+        # aslinya dari respons live -- jangan tebak, lihat log run nyata dulu
+        # (pola yg sama spt semua field GMGN lain di proyek ini).
+        if isinstance(rows[0], dict):
+            log.info(
+                "GMGN top100 RAW holder pertama (semua field) utk mint %s...: %s",
+                mint[:6], rows[0],
+            )
+
         tag_counter: Dict[str, int] = {}
         tag_pct: Dict[str, float] = {k: 0.0 for k in _SCAM_PATTERN_TAGS}
         tag_n: Dict[str, int] = {k: 0 for k in _SCAM_PATTERN_TAGS}

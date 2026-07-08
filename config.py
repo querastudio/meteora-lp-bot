@@ -70,6 +70,27 @@ QUOTE_MINTS = {
 MIN_MARKET_CAP_USD = _env_float("MIN_MARKET_CAP_USD", 300_000)
 MIN_VOLUME_H24_USD = _env_float("MIN_VOLUME_H24_USD", 1_000_000)
 
+# --- Volume ORGANIK & TINGGI (per rumus user) ---
+# Rasio sehat mcap:global_sol_fee ~ 10.000:1 (mcap $100k <-> fee kumulatif
+# global 10 SOL) -- proxy "fee yg terkumpul sepadan dgn ukuran mcap-nya",
+# BEDA dari MIN_CUMULATIVE_FEE_SOL (Stage 1, floor FLAT 20 SOL tanpa peduli
+# mcap -- token mcap $2jt yg cuma kumpul 20 SOL fee jelas timpang, tapi flat
+# floor tak pernah nangkep itu). Gate INI proporsional thdp mcap, jalan di
+# Stage 2 (butuh mcap dari Dexscreener, blm ada di Stage 1).
+MCAP_TO_FEE_SOL_RATIO = _env_float("MCAP_TO_FEE_SOL_RATIO", 10_000.0)
+# HARD GATE atau cuma soft warning -- default HARD (selaras filosofi "volume
+# organik & tinggi" sbg syarat inti, bukan sekadar nice-to-have).
+VOLUME_ORGANIC_HARD_GATE = _env_bool("VOLUME_ORGANIC_HARD_GATE", True)
+# Toleransi: jangan gugurkan tepat di garis, kasih buffer (rasio boleh SEDIKIT
+# di atas target sblm dianggap gagal) -- data fee on-chain naturally noisy.
+MCAP_TO_FEE_SOL_TOLERANCE = _env_float("MCAP_TO_FEE_SOL_TOLERANCE", 1.5)  # 1.5x buffer
+
+# Ambang volume 5 menit (dari GMGN volume_momentum) utk label "tinggi" --
+# ditampilkan + kontribusi soft-score, BUKAN hard gate (byk runner asli msh
+# di bawah ini pas awal sekali, jangan buang kandidat legit krn ini).
+VOLUME_5M_HIGH_USD = _env_float("VOLUME_5M_HIGH_USD", 50_000.0)
+VOLUME_5M_DECENT_USD = _env_float("VOLUME_5M_DECENT_USD", 10_000.0)
+
 
 # ---------------------------------------------------------------------------
 # STAGE 3 — KEAMANAN KONTRAK (Helius) — PALING KRITIS
@@ -149,8 +170,12 @@ YOUTUBE_LOOKBACK_HOURS = _env_int("YOUTUBE_LOOKBACK_HOURS", 72)
 GOOGLE_TRENDS_TIMEFRAME = os.getenv("GOOGLE_TRENDS_TIMEFRAME", "now 7-d")
 
 # Reddit (gratis, no key) -- endpoint publik search.json, TIDAK resmi
-# didokumentasikan utk otomasi berat. Matikan bila mulai kena rate-limit/berubah.
-REDDIT_ENABLED = _env_bool("REDDIT_ENABLED", True)
+# didokumentasikan utk otomasi berat. DEFAULT OFF: dikonfirmasi live berulang
+# kali (semua run sesi ini) SELALU balas 403 (Cloudflare block), 0% berhasil,
+# 0% kontribusi sinyal -- murni buang waktu tiap kandidat. Selaras jg dgn
+# permintaan user "narasi sederhanakan pakai data google trends, pumpfun
+# coin community" (2 kanal utama). Set True lagi kalau endpoint-nya jalan lg.
+REDDIT_ENABLED = _env_bool("REDDIT_ENABLED", False)
 
 # Ambang "aktif" per platform utk hitung BREADTH (berapa dari 4 platform hidup).
 NARRATIVE_MIN_YOUTUBE_VIDEOS = _env_int("NARRATIVE_MIN_YOUTUBE_VIDEOS", 5)
@@ -269,6 +294,14 @@ WEIGHTS = {
     # Jupiter Organic Score (gratis) — penguat deteksi wash-trading, di
     # samping heuristik holder/volatilitas yg sudah ada.
     "jupiter_organic": _env_float("W_JUPITER_ORGANIC", 10.0),
+    # Volume ORGANIK & TINGGI (rasio mcap:fee + volume 5m GMGN) — permintaan
+    # eksplisit user, bobot cukup besar krn ini salah satu dari 4 pilar inti
+    # yg diminta ("volume tinggi & organik").
+    "volume_organic": _env_float("W_VOLUME_ORGANIC", 12.0),
+    # ATH momentum — harga BARU SAJA mencetak rekor tertinggi (bukan cuma
+    # naik dari kemarin) = sinyal minat beli asli/genuine breakout, beda dari
+    # "volatility" (yg menilai drawdown/stabilitas, bukan arah rekor baru).
+    "ath_momentum": _env_float("W_ATH_MOMENTUM", 6.0),
 }
 # Total bobot dinormalisasi otomatis di scoring.py (skor akhir tetap 0-100
 # walau total di atas tak persis 100).
