@@ -392,19 +392,30 @@ def top100_cluster_analysis(mint: str, chain: str = "sol") -> Dict[str, Any]:
         if not rows:
             return out
 
-        # TEMPORARY: log skema mentah baris pertama -- perlu verifikasi field
+        # TEMPORARY: log skema mentah BEBERAPA baris -- perlu verifikasi field
         # asli utk fitur bundler-cluster BARU (permintaan user: analisa SOL
         # balance/wallet age/bought avg mc/remaining supply/funding source/
         # holding duration per-wallet, ala tab TOP100 GMGN web). Cuma
         # amount_percentage/tags/is_new/is_suspicious yg sudah dikonfirmasi
-        # dipakai; field lain (mis. sol_balance/wallet_created_at/
-        # avg_cost_usd/funding_from/hold_time) BELUM diverifikasi nama
-        # aslinya dari respons live -- jangan tebak, lihat log run nyata dulu
-        # (pola yg sama spt semua field GMGN lain di proyek ini).
+        # dipakai; field lain (mis. native_balance/start_holding_at/avg_cost/
+        # native_transfer.from_address) MUNCUL di respons tp BELUM pasti
+        # maknanya -- verifikasi pertama (rows[0]) ternyata addr_type=2
+        # exchange="pump_amm" (alamat POOL AMM, bukan wallet trader manusia
+        # -- semua field trading/cost/funding-nya nol/kosong, TAK
+        # representatif). Log rows[0] + 1 baris NON-pool (addr_type != 2)
+        # supaya ada contoh wallet trader asli sblm implementasi heuristik.
         if isinstance(rows[0], dict):
             log.info(
-                "GMGN top100 RAW holder pertama (semua field) utk mint %s...: %s",
+                "GMGN top100 RAW holder rows[0] utk mint %s...: %s",
                 mint[:6], rows[0],
+            )
+        non_pool = next(
+            (r for r in rows[1:] if isinstance(r, dict) and r.get("addr_type") != 2), None
+        )
+        if non_pool:
+            log.info(
+                "GMGN top100 RAW holder non-pool utk mint %s...: %s",
+                mint[:6], non_pool,
             )
 
         tag_counter: Dict[str, int] = {}
