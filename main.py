@@ -126,12 +126,33 @@ def _process_candidate(pool: Dict[str, Any], st: Dict[str, Any], sol_price: floa
 
     # ATH: cross-check thd candle harian GMGN (bukan cuma riwayat lokal kita
     # yg dibatasi ~1.4 hari) -- lihat docstring gmgn.ath_price() & state.py
-    # update_ath() utk kasus nyata $NEIL yg jadi alasan fix ini.
+    # update_ath() utk kasus nyata $NEIL/$SQUIRE yg jadi alasan fix ini.
+    prior_ath = state_mod.get_ath(st, mint)  # peek SEBELUM update_ath() mutasi
+    is_known_token = prior_ath > 0
     gm_ath = gmgn.ath_price(mint)
     is_new_ath = state_mod.update_ath(
         st, mint, metrics["price_usd"],
         gm_ath.get("ath_price_usd", 0.0), gm_ath.get("available", False),
     )
+    ath_info = {
+        "is_new_ath": is_new_ath,
+        "is_known_token": is_known_token,
+        "current_price": metrics["price_usd"],
+        "stored_ath": state_mod.get_ath(st, mint),
+        "gmgn_confirmed": gm_ath.get("available", False),
+    }
+    # GATE (permintaan eksplisit user, 8 Juli 2026): token yg SUDAH dikenal
+    # (py riwayat ATH sblm run ini) HANYA lanjut ke notifikasi kalau run ini
+    # genuine mencetak ATH baru -- fokus sinyal ke breakout asli drpd
+    # re-surface token lama yg cuma bouncing di bawah puncaknya. Token BARU
+    # (blm py riwayat) TETAP lanjut apa adanya -- "baru pertama kali
+    # kelihatan" itu sendiri sudah informasi berharga.
+    if config.ATH_GATE_FOR_KNOWN_TOKENS and is_known_token and not is_new_ath:
+        log.info(
+            "S2.5 gugur $%s: token lama, blm cetak ATH baru (harga $%.10f vs ATH tercatat $%.10f, GMGN konfirmasi=%s)",
+            symbol, metrics["price_usd"], ath_info["stored_ath"], ath_info["gmgn_confirmed"],
+        )
+        return False
 
     # ---- STAGE 3: keamanan kontrak (Helius) — paling kritis ----
     sec = helius.get_security_info(mint)
@@ -292,6 +313,7 @@ def _process_candidate(pool: Dict[str, Any], st: Dict[str, Any], sol_price: floa
         "links": links,
         "vol_organic": vol_organic,
         "is_new_ath": is_new_ath,
+        "ath_info": ath_info,
     }
     text = notify.format_message(ctx)
     if notify.send(text):
@@ -369,11 +391,22 @@ def analyze_by_mint(mint: str, st: Dict[str, Any], sol_price: float) -> bool:
     cum_fee_sol = (pool.get("cumulative_fee_usd", 0) / sol_price) if pool and sol_price > 0 else 0.0
     vol_organic = hard_filters.stage2_volume_organic(metrics["market_cap"], cum_fee_sol)
 
+    prior_ath = state_mod.get_ath(st, mint)  # peek SEBELUM update_ath() mutasi
+    is_known_token = prior_ath > 0
     gm_ath = gmgn.ath_price(mint)
     is_new_ath = state_mod.update_ath(
         st, mint, metrics["price_usd"],
         gm_ath.get("ath_price_usd", 0.0), gm_ath.get("available", False),
     )
+    # Analisa manual TAK kena gate ATH (filosofi sama spt gate lain di sini
+    # -- user sengaja minta lihat token INI, tampilkan status apa adanya).
+    ath_info = {
+        "is_new_ath": is_new_ath,
+        "is_known_token": is_known_token,
+        "current_price": metrics["price_usd"],
+        "stored_ath": state_mod.get_ath(st, mint),
+        "gmgn_confirmed": gm_ath.get("available", False),
+    }
 
     gm_sec = gmgn.token_security(mint)
     gm_dev = gmgn.dev_holding(mint)
@@ -446,6 +479,7 @@ def analyze_by_mint(mint: str, st: Dict[str, Any], sol_price: float) -> bool:
         "stage3_reasons": stage3_reasons,
         "vol_organic": vol_organic,
         "is_new_ath": is_new_ath,
+        "ath_info": ath_info,
     }
     text = notify.format_manual_message(ctx)
     return notify.send(text)

@@ -85,6 +85,16 @@ MCAP_TO_FEE_SOL_RATIO = _env_float("MCAP_TO_FEE_SOL_RATIO", 10_000.0)
 # HARD GATE atau cuma soft warning -- default HARD (selaras filosofi "volume
 # organik & tinggi" sbg syarat inti, bukan sekadar nice-to-have).
 VOLUME_ORGANIC_HARD_GATE = _env_bool("VOLUME_ORGANIC_HARD_GATE", True)
+# --- ATH gate utk token LAMA (permintaan eksplisit user, 8 Juli 2026) ---
+# Token yg SUDAH py riwayat ATH tercatat sblmnya ("dikenal") HANYA lolos ke
+# notifikasi kalau run ini genuine mencetak ATH baru (dikonfirmasi GMGN --
+# lihat state.update_ath()) -- fokus sinyal ke breakout asli, bukan
+# re-surface token lama yg cuma bouncing di bawah puncaknya (kasus nyata
+# $NEIL/$SQUIRE). Token BARU (blm py riwayat "ath" sblm run ini) TETAP
+# lolos apa adanya -- "baru pertama kali kelihatan" itu sendiri sudah
+# informasi berharga, tak ada "rekor lama" utk dibandingkan.
+ATH_GATE_FOR_KNOWN_TOKENS = _env_bool("ATH_GATE_FOR_KNOWN_TOKENS", True)
+
 # Toleransi: jangan gugurkan tepat di garis, kasih buffer (rasio boleh SEDIKIT
 # di atas target sblm dianggap gagal) -- data fee on-chain naturally noisy.
 MCAP_TO_FEE_SOL_TOLERANCE = _env_float("MCAP_TO_FEE_SOL_TOLERANCE", 1.5)  # 1.5x buffer

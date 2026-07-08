@@ -178,6 +178,11 @@ def build_sample_ctx() -> dict:
         "links": links,
         "vol_organic": vol_organic,
         "is_new_ath": True,
+        "ath_info": {
+            "is_new_ath": True, "is_known_token": True,
+            "current_price": metrics["price_usd"], "stored_ath": metrics["price_usd"],
+            "gmgn_confirmed": True,
+        },
     }
 
 
