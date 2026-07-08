@@ -59,6 +59,40 @@ def _yn(ok: bool) -> str:
     return "✅" if ok else "❌"
 
 
+def _fmt_price(p: float) -> str:
+    """Format harga token (bisa sangat kecil, mis. $0.0000012) ringkas tapi tetap presisi."""
+    try:
+        p = float(p)
+    except (TypeError, ValueError):
+        return "0"
+    if p <= 0:
+        return "0"
+    if p >= 1:
+        return f"{p:,.4f}"
+    s = f"{p:.10f}".rstrip("0")
+    return s + "0" if s.endswith(".") else s
+
+
+def _ath_line(ath_info: Dict[str, Any]) -> str:
+    """
+    Label status ATH SELALU tampil (permintaan eksplisit user, "metrik ATH
+    itu sangat penting") -- bukan cuma muncul kondisional saat True spt
+    sblmnya (waktu itu token BARU spt $KINS jadi tak py baris ATH sama
+    sekali, terlihat kayak fitur-nya hilang).
+    """
+    if not ath_info:
+        return ""
+    if ath_info.get("is_new_ath"):
+        return "🎯 <b>ATH BARU</b> — harga baru saja tembus rekor tertinggi!"
+    if not ath_info.get("is_known_token"):
+        return "🆕 <i>Token baru dipantau — blm ada riwayat ATH pembanding</i>"
+    stored_ath = ath_info.get("stored_ath", 0) or 0
+    current = ath_info.get("current_price", 0) or 0
+    pct = (current / stored_ath * 100.0) if stored_ath > 0 else 0.0
+    confirm_txt = "" if ath_info.get("gmgn_confirmed") else " <i>(blm terkonfirmasi GMGN run ini)</i>"
+    return f"📊 Blm ATH baru — harga skrg {pct:.0f}% dari ATH tercatat (${_fmt_price(stored_ath)}){confirm_txt}"
+
+
 def _lp_lock_emoji(gm_sec: Dict[str, Any]) -> str:
     """LP-lock emoji dari data ASLI GMGN (bukan ⚠️ statis spt dulu -- lihat hard_filters.lp_lock_warning)."""
     lp_locked = (gm_sec or {}).get("lp_locked")
@@ -97,8 +131,9 @@ def format_message(ctx: Dict[str, Any]) -> str:
 
     lines: List[str] = []
     lines.append(f"{emoji} <b>{v} — ${sym}</b>  <i>({ctx['score']:.0f}/100)</i>")
-    if ctx.get("is_new_ath"):
-        lines.append("🎯 <b>ATH BARU</b> — harga baru saja tembus rekor tertinggi!")
+    ath_line = _ath_line(ctx.get("ath_info", {}))
+    if ath_line:
+        lines.append(ath_line)
     lines.append(f"Pool: {_link(p['name'] or 'Meteora', links['Meteora'])}")
     lines.append("")
 
@@ -478,8 +513,9 @@ def format_manual_message(ctx: Dict[str, Any]) -> str:
         f"🔍 <b>HASIL ANALISA MANUAL — ${sym}</b>  "
         f"<i>(skor {ctx['score']:.0f}/100, verdict internal {ctx['verdict']})</i>"
     )
-    if ctx.get("is_new_ath"):
-        lines.append("🎯 <b>ATH BARU</b> — harga baru saja tembus rekor tertinggi!")
+    ath_line = _ath_line(ctx.get("ath_info", {}))
+    if ath_line:
+        lines.append(ath_line)
     lines.append(
         "<i>Hard gate ditampilkan apa adanya (bisa gagal) -- ini bukan hasil "
         "auto-screening yang sudah difilter, jadi baca ⚠️/❌ dgn cermat.</i>"
