@@ -44,6 +44,19 @@ def poll_new_mints(offset: int) -> Tuple[List[str], int]:
 
     Degrade gracefully: gagal/API mati -> ([], offset) -- tak crash run,
     cukup dicoba lagi run berikutnya.
+
+    BUG NYATA (dilaporkan user, spam notif $VLED berulang-ulang): getUpdates
+    Telegram TAK menganggap pesan "sudah dibaca" hanya krn kita LIHAT --
+    server Telegram baru betulan berhenti mengirim ulang update itu setelah
+    kita panggil getUpdates LAGI dgn offset LEBIH TINGGI (per docs resmi
+    Telegram). Sebelum fix ini, konfirmasi itu BARU terjadi di run
+    BERIKUTNYA (lewat next_offset yg disimpan ke state_data.json & di-push
+    balik ke git). Kalau push state itu GAGAL (kontensi banyak run
+    beruntun -- lihat scan.yml, DAN memang kejadian berkali-kali sesi ini
+    krn testing manual bertubi-tubi), run berikutnya muat ULANG offset LAMA
+    dari git, panggil getUpdates dgn offset itu lagi -> Telegram kirim ULANG
+    pesan yg SAMA -> analyze_by_mint() jalan lagi -> balasan Telegram
+    terkirim DUPLIKAT -- bisa berulang TERUS selama push state gagal.
     """
     mints: List[str] = []
     next_offset = offset
@@ -73,6 +86,22 @@ def poll_new_mints(offset: int) -> Tuple[List[str], int]:
 
         if mints:
             log.info("Telegram: %d mint diminta utk analisa manual", len(mints))
+
+        # KONFIRMASI KE TELEGRAM SEKARANG JUGA (dlm run yg sama), JANGAN
+        # nunggu next_offset berhasil di-persist ke git -- lihat bug di
+        # docstring atas. Panggilan kedua ini murah (limit=1, tak proses
+        # apa pun hasilnya) tp bikin Telegram BENERAN berhenti kirim ulang
+        # pesan yg sama, TERLEPAS dari sukses/gagalnya commit state_data.json
+        # setelahnya.
+        if next_offset != offset:
+            try:
+                http.get_json(
+                    TG_API.format(token=config.TELEGRAM_BOT_TOKEN),
+                    params={"offset": next_offset, "timeout": 0, "limit": 1},
+                    timeout=config.HTTP_TIMEOUT,
+                )
+            except Exception as e:  # noqa: BLE001
+                log.info("Konfirmasi offset Telegram gagal: %s (non-fatal)", e)
     except Exception as e:  # noqa: BLE001
         log.info("Polling Telegram getUpdates gagal: %s (degrade, coba lagi run berikutnya)", e)
     return mints, next_offset
