@@ -179,9 +179,9 @@ def build_sample_ctx() -> dict:
         "vol_organic": vol_organic,
         "is_new_ath": True,
         "ath_info": {
-            "is_new_ath": True, "is_known_token": True,
+            "is_new_ath": True, "is_known_token": True, "is_fresh": False,
             "current_price": metrics["price_usd"], "stored_ath": metrics["price_usd"],
-            "gmgn_confirmed": True,
+            "gmgn_confirmed": True, "candle_count": 96,
         },
     }
 

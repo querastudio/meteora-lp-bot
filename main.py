@@ -128,29 +128,42 @@ def _process_candidate(pool: Dict[str, Any], st: Dict[str, Any], sol_price: floa
     # yg dibatasi ~1.4 hari) -- lihat docstring gmgn.ath_price() & state.py
     # update_ath() utk kasus nyata $NEIL/$SQUIRE yg jadi alasan fix ini.
     prior_ath = state_mod.get_ath(st, mint)  # peek SEBELUM update_ath() mutasi
-    is_known_token = prior_ath > 0
+    is_known_locally = prior_ath > 0
     gm_ath = gmgn.ath_price(mint)
     is_new_ath = state_mod.update_ath(
         st, mint, metrics["price_usd"],
         gm_ath.get("ath_price_usd", 0.0), gm_ath.get("available", False),
     )
+    # "Fresh" HARUS pakai umur token SUNGGUHAN (candle_count GMGN = umur
+    # dlm hari), BUKAN cuma "blm ada di state kita" -- token bisa sudah lama
+    # ada di chain tp baru pertama kali lolos filter kita (mis. baru migrasi
+    # ke Meteora), yg kalau dianggap "fresh" dari riwayat lokal SAJA bakal
+    # salah lolos padahal udah jauh dari ATH aslinya (pola $NEIL/$SQUIRE
+    # lewat jalur beda). GMGN unavailable -> fallback ke riwayat lokal kita
+    # (degrade, bukan API-availability jadi single point of failure).
+    if gm_ath.get("available"):
+        is_fresh = gm_ath.get("candle_count", 0) <= config.ATH_FRESH_TOKEN_MAX_CANDLES
+    else:
+        is_fresh = not is_known_locally
     ath_info = {
         "is_new_ath": is_new_ath,
-        "is_known_token": is_known_token,
+        "is_known_token": is_known_locally,
+        "is_fresh": is_fresh,
         "current_price": metrics["price_usd"],
         "stored_ath": state_mod.get_ath(st, mint),
         "gmgn_confirmed": gm_ath.get("available", False),
+        "candle_count": gm_ath.get("candle_count", 0),
     }
-    # GATE (permintaan eksplisit user, 8 Juli 2026): token yg SUDAH dikenal
-    # (py riwayat ATH sblm run ini) HANYA lanjut ke notifikasi kalau run ini
-    # genuine mencetak ATH baru -- fokus sinyal ke breakout asli drpd
-    # re-surface token lama yg cuma bouncing di bawah puncaknya. Token BARU
-    # (blm py riwayat) TETAP lanjut apa adanya -- "baru pertama kali
-    # kelihatan" itu sendiri sudah informasi berharga.
-    if config.ATH_GATE_FOR_KNOWN_TOKENS and is_known_token and not is_new_ath:
+    # GATE (permintaan eksplisit user, 8 Juli 2026): HANYA lolos kalau token
+    # genuine fresh (baru, umur riil dari GMGN) ATAU token lama yg run ini
+    # genuine mencetak ATH baru. Fokus sinyal ke runner asli, bukan
+    # re-surface token lama yg cuma bouncing di bawah puncaknya.
+    if config.ATH_GATE_FOR_KNOWN_TOKENS and not is_fresh and not is_new_ath:
         log.info(
-            "S2.5 gugur $%s: token lama, blm cetak ATH baru (harga $%.10f vs ATH tercatat $%.10f, GMGN konfirmasi=%s)",
-            symbol, metrics["price_usd"], ath_info["stored_ath"], ath_info["gmgn_confirmed"],
+            "S2.5 gugur $%s: bukan token fresh (umur %d hari) & blm cetak ATH baru "
+            "(harga $%.10f vs ATH tercatat $%.10f, GMGN konfirmasi=%s)",
+            symbol, ath_info["candle_count"], metrics["price_usd"],
+            ath_info["stored_ath"], ath_info["gmgn_confirmed"],
         )
         return False
 
@@ -392,20 +405,26 @@ def analyze_by_mint(mint: str, st: Dict[str, Any], sol_price: float) -> bool:
     vol_organic = hard_filters.stage2_volume_organic(metrics["market_cap"], cum_fee_sol)
 
     prior_ath = state_mod.get_ath(st, mint)  # peek SEBELUM update_ath() mutasi
-    is_known_token = prior_ath > 0
+    is_known_locally = prior_ath > 0
     gm_ath = gmgn.ath_price(mint)
     is_new_ath = state_mod.update_ath(
         st, mint, metrics["price_usd"],
         gm_ath.get("ath_price_usd", 0.0), gm_ath.get("available", False),
     )
+    if gm_ath.get("available"):
+        is_fresh = gm_ath.get("candle_count", 0) <= config.ATH_FRESH_TOKEN_MAX_CANDLES
+    else:
+        is_fresh = not is_known_locally
     # Analisa manual TAK kena gate ATH (filosofi sama spt gate lain di sini
     # -- user sengaja minta lihat token INI, tampilkan status apa adanya).
     ath_info = {
         "is_new_ath": is_new_ath,
-        "is_known_token": is_known_token,
+        "is_known_token": is_known_locally,
+        "is_fresh": is_fresh,
         "current_price": metrics["price_usd"],
         "stored_ath": state_mod.get_ath(st, mint),
         "gmgn_confirmed": gm_ath.get("available", False),
+        "candle_count": gm_ath.get("candle_count", 0),
     }
 
     gm_sec = gmgn.token_security(mint)

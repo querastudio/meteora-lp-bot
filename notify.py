@@ -84,8 +84,10 @@ def _ath_line(ath_info: Dict[str, Any]) -> str:
         return ""
     if ath_info.get("is_new_ath"):
         return "🎯 <b>ATH BARU</b> — harga baru saja tembus rekor tertinggi!"
-    if not ath_info.get("is_known_token"):
-        return "🆕 <i>Token baru dipantau — blm ada riwayat ATH pembanding</i>"
+    if ath_info.get("is_fresh"):
+        candles = ath_info.get("candle_count", 0)
+        age_txt = f"~{candles} hari" if candles else "blm ada candle GMGN"
+        return f"🆕 <i>Token fresh (umur {age_txt}) — blm ada ATH lama utk dibandingkan</i>"
     stored_ath = ath_info.get("stored_ath", 0) or 0
     current = ath_info.get("current_price", 0) or 0
     pct = (current / stored_ath * 100.0) if stored_ath > 0 else 0.0
