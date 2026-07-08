@@ -755,8 +755,8 @@
 "symbol": "CATWIF"
 },
 "62YE1d4sRArBQzR5bdbxsx2k9LV3MdPV4xMC4Di2pump": {
+"ath": 0.000901,
 "price_history": [
-0.003101,
 0.003056,
 0.002957,
 0.003167,
@@ -1155,13 +1155,14 @@
 0.0009069,
 0.0009453,
 0.0009695,
-0.0009493
+0.0009493,
+0.000901
 ],
 "symbol": "BIF"
 },
 "6baGyq4HLbUn93MQUGFqBktpXP8BRjpoxSsAap4ppump": {
+"ath": 0.002005,
 "price_history": [
-0.006949,
 0.006877,
 0.006753,
 0.006937,
@@ -1560,11 +1561,13 @@
 0.002222,
 0.002058,
 0.001964,
-0.002012
+0.002012,
+0.002005
 ],
 "symbol": "LEVI"
 },
 "7thY5PzYdH311NXYE6mecBjUs7wcosk1bWw2qfH4pump": {
+"ath": 0.0002773,
 "last_notified_ts": 1783395467.3182852,
 "last_verdict": "WATCH",
 "price_history": [
@@ -1807,7 +1810,8 @@
 0.000303,
 0.0002897,
 0.000291,
-0.0002748
+0.0002748,
+0.0002773
 ],
 "symbol": "Sapijiju"
 },
@@ -2219,6 +2223,7 @@
 "symbol": "HeavyPulp"
 },
 "8jayQDfRc3GYxftBJ2VAwjqmRBdYPC9KnjY15rc9pump": {
+"ath": 0.0005876,
 "price_history": [
 0.001591,
 0.0008865,
@@ -2498,11 +2503,13 @@
 0.0006606,
 0.0005972,
 0.0006171,
-0.0005858
+0.0005858,
+0.0005876
 ],
 "symbol": "SAPIJIJU"
 },
 "96X4zg5T4NFWzTVFXHsadvYbxbzFX2Rqt3GXUv92pump": {
+"ath": 0.0002749,
 "last_notified_ts": 1783420072.4494538,
 "last_verdict": "WATCH",
 "price_history": [
@@ -2694,14 +2701,14 @@
 0.0002602,
 0.0002493,
 0.0002658,
-0.0002635
+0.0002635,
+0.0002749
 ],
 "symbol": "Balloon"
 },
 "9cRCn9rGT8V2imeM2BaKs13yhMEais3ruM3rPvTGpump": {
 "ath": 0.3898408900557962,
 "price_history": [
-0.3899,
 0.4035,
 0.413,
 0.4204,
@@ -3100,13 +3107,14 @@
 0.307,
 0.3138,
 0.3116,
-0.3103
+0.3103,
+0.309
 ],
 "symbol": "ANSEM"
 },
 "B6f27ETGcjgGNB1fqULJbXVmw9FnL8HgBp7R83hmpump": {
+"ath": 0.00227,
 "price_history": [
-0.002329,
 0.00223,
 0.002233,
 0.002189,
@@ -3505,7 +3513,8 @@
 0.00212,
 0.002104,
 0.002174,
-0.002219
+0.002219,
+0.00227
 ],
 "symbol": "drooling"
 },
@@ -3538,10 +3547,10 @@
 "symbol": "Shadow"
 },
 "BcHEaaTCvycPwwsJ9yQTXdHP9X2gCLkznDbZ8VySpump": {
+"ath": 0.004773,
 "last_notified_ts": 1783462953.3446808,
 "last_verdict": "WATCH",
 "price_history": [
-32.58,
 32.22,
 31.91,
 31.68,
@@ -3940,7 +3949,8 @@
 0.004838,
 0.004821,
 0.004809,
-0.004814
+0.004814,
+0.004773
 ],
 "symbol": "Jotchua"
 },
@@ -4449,7 +4459,6 @@
 "CFPkPq1eYPR8GLzEo59wUbbMioX4bshaTQiSGzTSpump": {
 "ath": 0.003950286693499151,
 "price_history": [
-0.00459,
 0.004861,
 0.004957,
 0.004869,
@@ -4848,7 +4857,8 @@
 0.002495,
 0.002538,
 0.002557,
-0.002573
+0.002573,
+0.002449
 ],
 "symbol": "MENSA"
 },
@@ -4930,6 +4940,7 @@
 "symbol": "0x"
 },
 "CizcDa22HJjXybKLriibqP167GcJjqiDHDPtuiMmpump": {
+"ath": 0.0009509,
 "last_notified_ts": 1783470160.8293781,
 "last_verdict": "WATCH",
 "price_history": [
@@ -4955,7 +4966,8 @@
 0.001069,
 0.001141,
 0.0009716,
-0.0009601
+0.0009601,
+0.0009509
 ],
 "symbol": "ok"
 },
@@ -5311,7 +5323,6 @@
 "last_notified_ts": 1783433887.142845,
 "last_verdict": "WATCH",
 "price_history": [
-0.002548,
 0.002592,
 0.002799,
 0.002711,
@@ -5710,7 +5721,8 @@
 0.0011,
 0.001097,
 0.001151,
-0.001159
+0.001159,
+0.001167
 ],
 "symbol": "BABYANSEM"
 },
@@ -6576,10 +6588,10 @@
 "symbol": "PUMPCADE"
 },
 "EmcxFTNVDqyLHp11NvwvLZ4D7LKGbG9i7B8RF7dwpump": {
+"ath": 0.003894,
 "last_notified_ts": 1783321862.9159179,
 "last_verdict": "WATCH",
 "price_history": [
-0.005971,
 0.005923,
 0.005948,
 0.005891,
@@ -6978,15 +6990,16 @@
 0.003939,
 0.003939,
 0.003953,
-0.003876
+0.003876,
+0.003894
 ],
 "symbol": "ZERO"
 },
 "FMqh9mqR6drPZqqW6wPqLHxX4rqNDWGhYLaMfoaJpump": {
+"ath": 0.002097,
 "last_notified_ts": 1783321925.2765362,
 "last_verdict": "WATCH",
 "price_history": [
-0.002861,
 0.002781,
 0.002751,
 0.002616,
@@ -7385,6 +7398,7 @@
 0.00201,
 0.002003,
 0.002004,
+0.002097,
 0.002097
 ],
 "symbol": "world"
@@ -7417,10 +7431,10 @@
 "symbol": "TripleT"
 },
 "JCKwsT8UAbygnFkZ7u3amDUM7BXRtwUhCsHQv2khpump": {
+"ath": 0.001737,
 "last_notified_ts": 1783235241.7734354,
 "last_verdict": "WATCH",
 "price_history": [
-0.003116,
 0.003134,
 0.003136,
 0.003146,
@@ -7819,7 +7833,8 @@
 0.001847,
 0.001841,
 0.001669,
-0.001736
+0.001736,
+0.001737
 ],
 "symbol": "CHANCE"
 },
@@ -7872,8 +7887,8 @@
 "symbol": "PUMPLON"
 },
 "cvkarf1CtN3tbLRk961vsaEf4T8QbnihDkCHa93pump": {
+"ath": 0.000548,
 "price_history": [
-0.0005635,
 0.0005614,
 0.0005379,
 0.0005379,
@@ -8272,10 +8287,11 @@
 0.0005656,
 0.0005724,
 0.0005641,
-0.0005497
+0.0005497,
+0.000548
 ],
 "symbol": "NEIL"
 }
 },
-"updated_at": 1783476419.4179964
+"updated_at": 1783476618.5235517
 }
