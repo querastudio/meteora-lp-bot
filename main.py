@@ -7,8 +7,9 @@ Alur per run (dipanggil cron GitHub Actions tiap 5 menit):
      maks ~5 menit (polling di cron yang sama, bukan webhook -- no infra baru).
   1. Load state (anti-duplikat + riwayat harga utk Stage 6) & harga SOL.
   2. Fetch pool Meteora, urut aktivitas.
-  3. Cascade: Stage 1 (pool) -> Stage 2 (mcap/volume) -> Stage 3 (keamanan)
-     -> Stage 4 (holder) -> Stage 5 (LP) -> Stage 6 (volatilitas) -> Stage 7 (narasi).
+  3. Cascade: Stage 1 (pool) -> Stage 2 (mcap) -> Stage 2.5 (volume organik
+     proporsional mcap:fee) -> Stage 3 (keamanan) -> Stage 4 (holder) ->
+     Stage 5 (LP) -> Stage 6 (volatilitas) -> Stage 7 (narasi).
      Gugur di stage awal = tak lanjut ke stage mahal (hemat rate limit).
   4. Scoring -> verdict. Kirim Telegram (anti-duplikat). Simpan state.
 
@@ -95,7 +96,7 @@ def _process_candidate(pool: Dict[str, Any], st: Dict[str, Any], sol_price: floa
     mint = hard_filters.base_mint_of(pool)
     name = pool.get("name", "?")
 
-    # ---- STAGE 2: token metrics (mcap/volume) ----
+    # ---- STAGE 2: token metrics (mcap saja -- vol24h flat floor dihapus, lihat hard_filters.stage2_token) ----
     metrics = dexscreener.get_token_metrics(mint)
     if not metrics:
         log.info("S2 skip %s: metrik token tak tersedia", name)

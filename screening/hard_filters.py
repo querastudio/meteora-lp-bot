@@ -72,16 +72,23 @@ def base_mint_of(pool: Dict[str, Any]) -> str:
 # STAGE 2 — HARD FILTER TOKEN (Dexscreener: mcap & volume)
 # ---------------------------------------------------------------------------
 def stage2_token(metrics: Dict[str, Any]) -> Tuple[bool, List[str]]:
-    """Cek token vs gate mcap/volume."""
+    """
+    Cek token vs gate mcap. Floor vol24h FLAT ($1M) SENGAJA DIHAPUS dari sini
+    (per keputusan user, 8 Juli 2026) -- data live konfirmasi ini jadi
+    bottleneck DOMINAN funnel (7/8 kandidat gugur Stage 2 murni krn vol24h,
+    2 di antaranya cuma kurang <10% dari floor), sementara gate "Volume
+    Organik" (Stage 2.5 di main.py -- rasio mcap:fee kumulatif proporsional)
+    sudah jadi pemeriksa volume yg LEBIH TEPAT (adil utk mcap kecil maupun
+    besar, drpd floor flat yg sama rata). MIN_VOLUME_H24_USD di config.py
+    TETAP dipakai screening/volatility.py sbg soft-signal "volume tahan
+    lama" (bukan hard gate lagi di sini).
+    """
     reasons: List[str] = []
     ok = True
 
     if metrics["market_cap"] < config.MIN_MARKET_CAP_USD:
         ok = False
         reasons.append(f"mcap ${metrics['market_cap']:,.0f} < ${config.MIN_MARKET_CAP_USD:,.0f}")
-    if metrics["volume_h24"] < config.MIN_VOLUME_H24_USD:
-        ok = False
-        reasons.append(f"vol24h ${metrics['volume_h24']:,.0f} < ${config.MIN_VOLUME_H24_USD:,.0f}")
 
     return ok, reasons
 

@@ -68,6 +68,10 @@ QUOTE_MINTS = {
 # STAGE 2 — HARD FILTER TOKEN (Dexscreener)
 # ---------------------------------------------------------------------------
 MIN_MARKET_CAP_USD = _env_float("MIN_MARKET_CAP_USD", 300_000)
+# BUKAN hard gate lagi (dihapus dari hard_filters.stage2_token per keputusan
+# user 8 Juli 2026 -- jadi bottleneck dominan funnel, gate "Volume Organik"
+# proporsional di Stage 2.5 sudah gantikan perannya). Tetap dipakai
+# screening/volatility.py sbg ambang soft-signal "volume tahan lama".
 MIN_VOLUME_H24_USD = _env_float("MIN_VOLUME_H24_USD", 1_000_000)
 
 # --- Volume ORGANIK & TINGGI (per rumus user) ---
