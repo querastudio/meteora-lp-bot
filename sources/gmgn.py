@@ -273,6 +273,72 @@ def volume_momentum(mint: str, chain: str = "sol") -> Dict[str, Any]:
     return out
 
 
+def ath_price(mint: str, chain: str = "sol") -> Dict[str, Any]:
+    """
+    Return { available, ath_price_usd, candle_count }.
+
+    Bug nyata (dilaporkan user via screenshot chart GMGN $NEIL, 8 Juli
+    2026): badge "ATH BARU" kita muncul PADAHAL harga jelas jatuh drastis
+    dari puncak asli token (garis "All Time High" GMGN jauh di atas harga
+    skrg). Akar masalah: tracking ATH lokal kita (state.py, dari
+    price_history sendiri) DIBATASI ~1.4 hari (400 titik @5menit) DAN
+    sempat py field "ath" basi peninggalan kode lama yg sudah mati (lihat
+    riwayat sesi ini) -- utk token yg puncak aslinya terjadi SBLM kita mulai
+    pantau (atau sblm ATH-tracking diperbaiki), baseline kita jadi jauh di
+    bawah puncak sungguhan, bikin bounce kecil di tengah downtrend salah
+    kebaca "ATH baru".
+
+    Fix: pakai candle HARIAN (resolution=1d) dari /v1/market/token_kline
+    (endpoint resmi GMGN, dikonfirmasi via docs github.com/GMGNAI/gmgn-skills
+    -- field high/low/open/close/volume/amount per candle, BELUM pernah
+    kita panggil sblm ini di proyek ini, jadi field blm terverifikasi
+    live 100% spt endpoint lain -- log skema mentah candle pertama sekali).
+    MAX(high) dari SELURUH candle = ATH sungguhan token ini, independen dari
+    seberapa lama/jauh kita sendiri sudah mulai tracking-nya -- 1 call
+    ringan, resolution harian cukup cover umur token memecoin tipikal
+    (hari-bulan) tanpa respons kegedean.
+    """
+    out = {"available": False, "ath_price_usd": 0.0, "candle_count": 0}
+    try:
+        data = _get(
+            "/v1/market/token_kline",
+            {"chain": chain, "address": mint, "resolution": "1d", "from": 0, "to": int(time.time())},
+        )
+        if not data:
+            return out
+        rows = data if isinstance(data, list) else (data.get("list") or [])
+        if not rows:
+            return out
+
+        if isinstance(rows[0], dict):
+            log.info(
+                "GMGN ath_price RAW candle pertama (semua field) utk mint %s...: %s",
+                mint[:6], rows[0],
+            )
+
+        highs: List[float] = []
+        for c in rows:
+            if not isinstance(c, dict):
+                continue
+            try:
+                highs.append(float(c.get("high", 0) or 0))
+            except (TypeError, ValueError):
+                continue
+        if not highs:
+            return out
+
+        out.update({
+            "available": True, "ath_price_usd": max(highs), "candle_count": len(rows),
+        })
+        log.info(
+            "GMGN ath_price OK utk mint %s...: ATH $%.10f dari %d candle harian",
+            mint[:6], out["ath_price_usd"], len(rows),
+        )
+    except Exception as e:  # noqa: BLE001
+        log.info("GMGN ath_price gagal utk mint %s...: %s (degrade)", mint[:6], e)
+    return out
+
+
 def top_holder_tags(mint: str, chain: str = "sol") -> Dict[str, Any]:
     """
     Return { available, smart_money_count, sniper_count, rat_trader_count,

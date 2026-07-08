@@ -67,39 +67,62 @@ def save(state: Dict[str, Any]) -> None:
         log.error("Gagal simpan state: %s", e)
 
 
-def record_price(state: Dict[str, Any], mint: str, price: float, symbol: str = "") -> bool:
-    """
-    Catat harga terbaru ke riwayat (dipakai Stage 6 utk estimasi volume-tahan-
-    lama) & update ATH. Return True kalau harga ini ATH BARU (pecahkan
-    rekor tertinggi sebelumnya) -- sinyal momentum bullish yg diminta user
-    ("harga mencetak all time high ini penting"), beda dari sekadar "harga
-    naik" krn nembus level yg BELUM PERNAH dicapai token ini sblmnya, bukan
-    cuma naik dari harga kemarin.
-
-    Token yg BARU PERTAMA KALI tercatat (belum py riwayat/ATH sblmnya) TIDAK
-    dianggap "ATH baru" -- tak ada apa pun utk "dipecahkan", flag itu cuma
-    bermakna kalau ada rekor sblmnya yg beneran ditembus.
-    """
+def record_price(state: Dict[str, Any], mint: str, price: float, symbol: str = "") -> None:
+    """Catat harga terbaru ke riwayat (dipakai Stage 6 utk estimasi volume-tahan-lama)."""
     tok = state["tokens"].setdefault(mint, {"price_history": [], "symbol": symbol})
 
     hist: List[float] = tok.get("price_history", [])
-    prior_ath = tok.get("ath")
-    is_new_ath = False
     if price > 0:
         hist.append(round(price, 12))
         if len(hist) > _MAX_HISTORY:
             hist = hist[-_MAX_HISTORY:]
         tok["price_history"] = hist
-        if prior_ath is not None and price > prior_ath:
-            is_new_ath = True
-        tok["ath"] = max(prior_ath, price) if prior_ath is not None else price
     if symbol:
         tok["symbol"] = symbol
-    return is_new_ath
 
 
 def get_ath(state: Dict[str, Any], mint: str) -> float:
     return float(state["tokens"].get(mint, {}).get("ath") or 0.0)
+
+
+def update_ath(
+    state: Dict[str, Any], mint: str, current_price: float, external_ath: float = 0.0,
+) -> bool:
+    """
+    Update ATH tercatat & return True kalau current_price ini ATH BARU
+    (pecahkan rekor tertinggi sblmnya) -- sinyal momentum bullish genuine
+    breakout, beda dari sekadar "naik dari kemarin".
+
+    DIPISAH dari record_price() (dulu 1 fungsi, lihat git history) krn bug
+    nyata: baseline ATH yg cuma dari price_history LOKAL kita (dibatasi
+    ~1.4 hari @5menit) atau field "ath" basi peninggalan kode lama SALAH
+    utk token yg puncak aslinya terjadi SBLM kita mulai pantau -- kasus
+    nyata $NEIL (dilaporkan user, screenshot chart GMGN): badge "ATH BARU"
+    muncul padahal harga jelas jatuh jauh dari puncak asli. external_ath
+    (dari gmgn.ath_price(), MAX(high) candle harian GMGN -- independen dari
+    riwayat lokal kita) dipakai sbg baseline TAMBAHAN, bukan pengganti --
+    kalau external_ath > current_price, current_price BUKAN ATH baru
+    sungguhan, TERLEPAS dari berapa pun "ath" lokal kita sblmnya (yg mgkn
+    keliru krn gap riwayat).
+
+    Token BARU PERTAMA KALI tercatat (tok["ath"] blm ada) TIDAK dianggap
+    "ATH baru" -- tak ada rekor sblmnya utk "dipecahkan"; baseline langsung
+    diisi max(current_price, external_ath) supaya start dari titik paling
+    akurat yg kita tahu, bukan nunggu run berikutnya.
+    """
+    tok = state["tokens"].setdefault(mint, {"price_history": [], "symbol": ""})
+    prior_ath = tok.get("ath")
+
+    candidates = [current_price]
+    if external_ath and external_ath > 0:
+        candidates.append(external_ath)
+    if prior_ath is not None:
+        candidates.append(prior_ath)
+    new_ath = max(candidates)
+
+    is_new_ath = prior_ath is not None and current_price >= new_ath and current_price > prior_ath
+    tok["ath"] = new_ath
+    return is_new_ath
 
 
 def get_price_history(state: Dict[str, Any], mint: str) -> List[float]:

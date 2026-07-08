@@ -103,10 +103,8 @@ def _process_candidate(pool: Dict[str, Any], st: Dict[str, Any], sol_price: floa
         return False
 
     symbol = metrics["symbol"]
-    # Catat harga ke riwayat (dipakai Stage 6 utk estimasi volume-tahan-lama)
-    # & deteksi ATH BARU (harga menembus rekor tertinggi tercatat -- sinyal
-    # momentum genuine breakout, beda dari sekadar "naik dari kemarin").
-    is_new_ath = state_mod.record_price(st, mint, metrics["price_usd"], symbol)
+    # Catat harga ke riwayat (dipakai Stage 6 utk estimasi volume-tahan-lama).
+    state_mod.record_price(st, mint, metrics["price_usd"], symbol)
 
     ok2, reasons2 = hard_filters.stage2_token(metrics)
     if not ok2:
@@ -125,6 +123,15 @@ def _process_candidate(pool: Dict[str, Any], st: Dict[str, Any], sol_price: floa
     if config.VOLUME_ORGANIC_HARD_GATE and not vol_organic["pass"]:
         log.info("S2.5 gugur $%s: %s", symbol, vol_organic["reason"])
         return False
+
+    # ATH: cross-check thd candle harian GMGN (bukan cuma riwayat lokal kita
+    # yg dibatasi ~1.4 hari) -- lihat docstring gmgn.ath_price() & state.py
+    # update_ath() utk kasus nyata $NEIL yg jadi alasan fix ini.
+    gm_ath = gmgn.ath_price(mint)
+    is_new_ath = state_mod.update_ath(
+        st, mint, metrics["price_usd"],
+        gm_ath.get("ath_price_usd", 0.0) if gm_ath.get("available") else 0.0,
+    )
 
     # ---- STAGE 3: keamanan kontrak (Helius) — paling kritis ----
     sec = helius.get_security_info(mint)
@@ -310,7 +317,7 @@ def analyze_by_mint(mint: str, st: Dict[str, Any], sol_price: float) -> bool:
         return False
 
     symbol = metrics["symbol"]
-    is_new_ath = state_mod.record_price(st, mint, metrics["price_usd"], symbol)
+    state_mod.record_price(st, mint, metrics["price_usd"], symbol)
 
     stage2_pass, stage2_reasons = hard_filters.stage2_token(metrics)
 
@@ -355,6 +362,12 @@ def analyze_by_mint(mint: str, st: Dict[str, Any], sol_price: float) -> bool:
     # sengaja minta lihat token INI, tampilkan apa adanya spt gate lain).
     cum_fee_sol = (pool.get("cumulative_fee_usd", 0) / sol_price) if pool and sol_price > 0 else 0.0
     vol_organic = hard_filters.stage2_volume_organic(metrics["market_cap"], cum_fee_sol)
+
+    gm_ath = gmgn.ath_price(mint)
+    is_new_ath = state_mod.update_ath(
+        st, mint, metrics["price_usd"],
+        gm_ath.get("ath_price_usd", 0.0) if gm_ath.get("available") else 0.0,
+    )
 
     gm_sec = gmgn.token_security(mint)
     gm_dev = gmgn.dev_holding(mint)
