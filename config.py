@@ -53,7 +53,7 @@ LUNARCRUSH_API_KEY = os.getenv("LUNARCRUSH_API_KEY", "")  # opsional, BERBAYAR (
 # ---------------------------------------------------------------------------
 # STAGE 1 — HARD FILTER POOL (dari data Meteora, 0 call tambahan)
 # ---------------------------------------------------------------------------
-MIN_TVL_USD = _env_float("MIN_TVL_USD", 10_000)          # likuiditas pool minimal
+MIN_TVL_USD = _env_float("MIN_TVL_USD", 1_000)           # likuiditas pool minimal
 MIN_BASE_FEE_PCT = _env_float("MIN_BASE_FEE_PCT", 2.0)   # base fee >= 2% (fee gemuk)
 MIN_BIN_STEP = _env_int("MIN_BIN_STEP", 100)             # bin step >= 100 (volatile-friendly)
 MIN_CUMULATIVE_FEE_SOL = _env_float("MIN_CUMULATIVE_FEE_SOL", 20.0)  # total fee global >= 20 SOL
