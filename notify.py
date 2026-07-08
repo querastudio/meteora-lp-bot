@@ -404,6 +404,28 @@ def _gmgn_lines(gm: Dict[str, Any]) -> List[str]:
         nonzero = [f"{label} {pct:.0f}%" for label, pct in breakdown if pct > 0]
         if nonzero:
             lines.append(f"  ⚠️ {' | '.join(nonzero)} <i>(% supply top-100)</i>")
+
+        bc = top100.get("bundler_cluster") or {}
+        if bc.get("available"):
+            lines.append(
+                f"─ GMGN Bundler-cluster: {bc.get('label','?')} "
+                f"(skor {bc.get('score',0):.0f}/100, {bc.get('sample_count',0)}/6 sinyal) "
+                f"<i>(kian seragam saldo/umur/harga-beli/supply/durasi antar wallet -- kian tinggi)</i>"
+            )
+            sig = bc.get("signals", {})
+            sig_labels = {
+                "sol_balance": "saldo SOL", "wallet_age": "umur wallet",
+                "bought_avg_mc": "avg MC beli", "remaining_supply": "sisa supply",
+                "holding_duration": "durasi hold", "funding_source": "funding source",
+            }
+            high_sig = [sig_labels[k] for k, v in sig.items() if v is not None and v >= 0.7]
+            if high_sig:
+                lines.append(f"  🔴 sangat seragam: {', '.join(high_sig)}")
+            if bc.get("top_funding_wallet_count", 0) >= 2:
+                lines.append(
+                    f"  💰 {bc['top_funding_wallet_count']} wallet ({bc.get('top_funding_share_pct',0):.0f}%) "
+                    f"didanai dari 1 alamat yg sama"
+                )
     return lines
 
 

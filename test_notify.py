@@ -76,6 +76,15 @@ def build_sample_ctx() -> dict:
             "is_new_pct": 6.0, "is_new_count": 3,
             "is_suspicious_pct": 2.0, "is_suspicious_count": 1,
             "sample_count": 100, "coverage_pct": 78.6,
+            "bundler_cluster": {
+                "available": True, "score": 22.0, "label": "✅ variasi wajar (organik)",
+                "sample_count": 5,
+                "signals": {
+                    "sol_balance": 0.15, "wallet_age": 0.1, "bought_avg_mc": 0.3,
+                    "remaining_supply": 0.2, "holding_duration": 0.1, "funding_source": None,
+                },
+                "top_funding_share_pct": 0.0, "top_funding_wallet_count": 0,
+            },
         },
         "volume": {
             "available": True, "volume_1m": 42000, "volume_5m": 210000,

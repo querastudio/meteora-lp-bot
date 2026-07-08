@@ -194,7 +194,7 @@ def _process_candidate(pool: Dict[str, Any], st: Dict[str, Any], sol_price: floa
     gm_sec = gmgn.token_security(mint)
     gm_dev = gmgn.dev_holding(mint)
     gm_holders = gmgn.top_holder_tags(mint)
-    gm_top100 = gmgn.top100_cluster_analysis(mint)
+    gm_top100 = gmgn.top100_cluster_analysis(mint, metrics["market_cap"], metrics["price_usd"], sol_price)
     warnings.extend(gm_sec.get("flags", []))
 
     # ---- Sintesis AI (opsional -- lihat sources/gemini.py & ai_common.py) ----
@@ -227,11 +227,13 @@ def _process_candidate(pool: Dict[str, Any], st: Dict[str, Any], sol_price: floa
     nar_ai = {}
     if has_enough_evidence:
         nar_ai = gemini.assess_narrative(
-            symbol, nar.get("category", "unknown"), nar, lp, vol, hold, vwap, jup, vol_organic, is_new_ath,
+            symbol, nar.get("category", "unknown"), nar, lp, vol, hold, vwap, jup,
+            vol_organic, is_new_ath, gm_top100,
         )
         if not nar_ai.get("available"):
             nar_ai = groq.assess_narrative(
-                symbol, nar.get("category", "unknown"), nar, lp, vol, hold, vwap, jup, vol_organic, is_new_ath,
+                symbol, nar.get("category", "unknown"), nar, lp, vol, hold, vwap, jup,
+                vol_organic, is_new_ath, gm_top100,
             )
     else:
         log.info(
@@ -356,7 +358,7 @@ def analyze_by_mint(mint: str, st: Dict[str, Any], sol_price: float) -> bool:
     gm_sec = gmgn.token_security(mint)
     gm_dev = gmgn.dev_holding(mint)
     gm_holders = gmgn.top_holder_tags(mint)
-    gm_top100 = gmgn.top100_cluster_analysis(mint)
+    gm_top100 = gmgn.top100_cluster_analysis(mint, metrics["market_cap"], metrics["price_usd"], sol_price)
     warnings.extend(gm_sec.get("flags", []))
 
     reddit_cnt = nar.get("reddit", {}).get("post_count", 0)
@@ -370,11 +372,13 @@ def analyze_by_mint(mint: str, st: Dict[str, Any], sol_price: float) -> bool:
     nar_ai = {}
     if has_enough_evidence:
         nar_ai = gemini.assess_narrative(
-            symbol, nar.get("category", "unknown"), nar, lp, vol, hold, vwap, jup, vol_organic, is_new_ath,
+            symbol, nar.get("category", "unknown"), nar, lp, vol, hold, vwap, jup,
+            vol_organic, is_new_ath, gm_top100,
         )
         if not nar_ai.get("available"):
             nar_ai = groq.assess_narrative(
-                symbol, nar.get("category", "unknown"), nar, lp, vol, hold, vwap, jup, vol_organic, is_new_ath,
+                symbol, nar.get("category", "unknown"), nar, lp, vol, hold, vwap, jup,
+                vol_organic, is_new_ath, gm_top100,
             )
     else:
         log.info(

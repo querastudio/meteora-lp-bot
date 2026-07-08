@@ -66,6 +66,7 @@ def build_context_block(
     jup: Dict[str, Any],
     vol_organic: Dict[str, Any] = None,
     is_new_ath: bool = False,
+    gm_top100: Dict[str, Any] = None,
 ) -> str:
     """
     Rangkai metrik TERUKUR (angka hasil hitungan kita sendiri, BUKAN teks
@@ -87,6 +88,13 @@ def build_context_block(
         f"({hold.get('largest_cluster_wallets', 0)} wallet), "
         f"indikasi koordinasi wallet: {hold.get('coordination_label', 'n/a')}"
     )
+    bc = ((gm_top100 or {}).get("bundler_cluster")) or {}
+    if bc.get("available"):
+        lines.append(
+            f"- GMGN bundler-cluster (statistik top100: keseragaman saldo SOL/umur "
+            f"wallet/harga beli/sisa supply/durasi hold/funding source antar top "
+            f"holder): {bc.get('label','?')} skor {bc.get('score',0):.0f}/100"
+        )
     lines.append(
         f"- Narasi terukur: viralitas={nar.get('viral_label', '?')}, "
         f"daya tahan={nar.get('durability_label', '?')} "
