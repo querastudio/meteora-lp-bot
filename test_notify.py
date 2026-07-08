@@ -16,10 +16,24 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 log = logging.getLogger("test_notify")
 
 
-def build_sample_ctx() -> dict:
-    symbol = "PEPEC"
-    mint = "PePeCMintExampleXXXXXXXXXXXXXXXXXXXXXXXXXXX"
-    pool_addr = "PoolExampleXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+def build_sample_ctx(scenario: str = "ath_baru") -> dict:
+    """
+    scenario:
+      "ath_baru" -- token LAMA yg genuine mencetak ATH baru run ini.
+      "fresh"    -- token BARU dipantau (umur candle GMGN sedikit), blm
+                    ada ATH lama utk dibandingkan -- lolos gate ATH krn
+                    fresh, BUKAN krn mencetak rekor.
+    """
+    is_fresh_scenario = scenario == "fresh"
+    symbol = "FRESHY" if is_fresh_scenario else "PEPEC"
+    mint = (
+        "FReshYMintExampleXXXXXXXXXXXXXXXXXXXXXXXXXX" if is_fresh_scenario
+        else "PePeCMintExampleXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+    )
+    pool_addr = (
+        "PoolFreshExampleXXXXXXXXXXXXXXXXXXXXXXXXXXX" if is_fresh_scenario
+        else "PoolExampleXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+    )
 
     pool = {
         "address": pool_addr, "name": f"{symbol}-SOL",
@@ -40,9 +54,12 @@ def build_sample_ctx() -> dict:
     }
     lp = {
         "fee_tvl_daily_pct": 6.8, "vol_tvl": 3.2, "lp_conc_score": 0.82,
-        "pool_age_hours": 96, "fee_estimated": False,
+        "pool_age_hours": 2 if is_fresh_scenario else 96, "fee_estimated": False,
     }
-    vol = {"note": "turun bertahap, volume tahan 4 hari", "vertical_death": False}
+    vol = {
+        "note": "msh volatile, blm cukup data histori" if is_fresh_scenario else "turun bertahap, volume tahan 4 hari",
+        "vertical_death": False,
+    }
     vwap = {
         "available": True, "vwap": 0.00623, "ratio_pct": 30.3,
         "above_vwap": True, "momentum_score": 0.88, "candle_count": 96,
@@ -158,9 +175,24 @@ def build_sample_ctx() -> dict:
 
     links = notify.build_manual_links(mint, pool_addr, symbol)
 
+    if is_fresh_scenario:
+        ath_info = {
+            "is_new_ath": False, "is_known_token": False, "is_fresh": True,
+            "current_price": metrics["price_usd"], "stored_ath": metrics["price_usd"],
+            "gmgn_confirmed": True, "candle_count": 1,
+        }
+        verdict, score = "WATCH", 68
+    else:
+        ath_info = {
+            "is_new_ath": True, "is_known_token": True, "is_fresh": False,
+            "current_price": metrics["price_usd"], "stored_ath": metrics["price_usd"],
+            "gmgn_confirmed": True, "candle_count": 96,
+        }
+        verdict, score = "STRONG", 91
+
     return {
-        "verdict": "STRONG",
-        "score": 91,
+        "verdict": verdict,
+        "score": score,
         "symbol": symbol,
         "mint": mint,
         "metrics": metrics,
@@ -177,23 +209,23 @@ def build_sample_ctx() -> dict:
         "warnings": warnings,
         "links": links,
         "vol_organic": vol_organic,
-        "is_new_ath": True,
-        "ath_info": {
-            "is_new_ath": True, "is_known_token": True, "is_fresh": False,
-            "current_price": metrics["price_usd"], "stored_ath": metrics["price_usd"],
-            "gmgn_confirmed": True, "candle_count": 96,
-        },
+        "is_new_ath": ath_info["is_new_ath"],
+        "ath_info": ath_info,
     }
 
 
 def main() -> None:
-    ctx = build_sample_ctx()
-    text = "🧪 <b>INI CONTOH/TEST</b> — bukan sinyal beli sungguhan\n\n" + notify.format_message(ctx)
-    ok = notify.send(text)
-    if ok:
-        log.info("Test notifikasi terkirim.")
-    else:
-        log.error("Gagal kirim test notifikasi -- cek TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID.")
+    for scenario, label in [("ath_baru", "token LAMA cetak ATH baru"), ("fresh", "token BARU/fresh")]:
+        ctx = build_sample_ctx(scenario)
+        text = (
+            f"🧪 <b>INI CONTOH/TEST ({label})</b> — bukan sinyal beli sungguhan\n\n"
+            + notify.format_message(ctx)
+        )
+        ok = notify.send(text)
+        if ok:
+            log.info("Test notifikasi (%s) terkirim.", scenario)
+        else:
+            log.error("Gagal kirim test notifikasi (%s) -- cek TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID.", scenario)
 
 
 if __name__ == "__main__":
