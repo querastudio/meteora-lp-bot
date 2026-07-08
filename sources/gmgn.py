@@ -300,14 +300,26 @@ def ath_price(mint: str, chain: str = "sol") -> Dict[str, Any]:
     """
     out = {"available": False, "ath_price_usd": 0.0, "candle_count": 0}
     try:
+        # GMGN nolak "from": 0 (dicoba live 8 Juli 2026 -> 400 BAD_REQUEST
+        # "from get 0 but must be a valid timestamp in ms") -- dua kesalahan
+        # sekaligus: (1) API minta MILIDETIK bukan detik, (2) literal 0 tak
+        # dianggap timestamp valid sama sekali. Pakai 400 hari ke belakang
+        # (cukup cover umur token memecoin tipikal) dlm ms, bukan epoch 0.
+        from_ms = int((time.time() - 400 * 86400) * 1000)
+        to_ms = int(time.time() * 1000)
         data = _get(
             "/v1/market/token_kline",
-            {"chain": chain, "address": mint, "resolution": "1d", "from": 0, "to": int(time.time())},
+            {"chain": chain, "address": mint, "resolution": "1d", "from": from_ms, "to": to_ms},
         )
         if not data:
+            log.info("GMGN ath_price: respons kosong/gagal utk mint %s... (degrade)", mint[:6])
             return out
         rows = data if isinstance(data, list) else (data.get("list") or [])
         if not rows:
+            log.info(
+                "GMGN ath_price: tak ada candle utk mint %s... (respons: %s)",
+                mint[:6], str(data)[:200],
+            )
             return out
 
         if isinstance(rows[0], dict):
