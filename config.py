@@ -104,7 +104,10 @@ VOLUME_ORGANIC_HARD_GATE = _env_bool("VOLUME_ORGANIC_HARD_GATE", True)
 ATH_GATE_FOR_KNOWN_TOKENS = _env_bool("ATH_GATE_FOR_KNOWN_TOKENS", True)
 # Token dianggap "fresh" kalau candle harian GMGN <= ini (umur token dlm
 # hari). GMGN candle mulai dihitung sejak token py transaksi pertama.
-ATH_FRESH_TOKEN_MAX_CANDLES = _env_int("ATH_FRESH_TOKEN_MAX_CANDLES", 2)
+# Batas 1 (permintaan eksplisit user, 9 Juli 2026): usia <1 hari -> lolos
+# tanpa perlu cetak ATH baru (asal hard gate lain lolos); usia >1 hari ->
+# WAJIB cetak ATH baru buat lolos S2.5 (lihat pemakaian di main.py).
+ATH_FRESH_TOKEN_MAX_CANDLES = _env_int("ATH_FRESH_TOKEN_MAX_CANDLES", 1)
 
 # Toleransi: jangan gugurkan tepat di garis, kasih buffer (rasio boleh SEDIKIT
 # di atas target sblm dianggap gagal) -- data fee on-chain naturally noisy.
