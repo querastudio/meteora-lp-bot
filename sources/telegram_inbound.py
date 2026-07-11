@@ -50,8 +50,21 @@ _CMD_RE = re.compile(r"^/(start|stop|list|status)(?:@\w+)?(?:\s+(.*))?$", re.IGN
 def parse_command(text: str) -> Optional[Dict[str, Any]]:
     """Parse 1 baris pesan jadi {"cmd": "start"|"stop"|"list"|"status", "args": [...]}
     atau None kalau bukan command yg dikenali. Diekspor (dipakai poll_new_mints
-    utk SKIP command dari ekstraksi mint, dan poll_commands utk ekstrak command)."""
-    m = _CMD_RE.match(text.strip())
+    utk SKIP command dari ekstraksi mint, dan poll_commands utk ekstrak command).
+
+    BUG NYATA (dilaporkan user, /start jatuh ke "analisa manual" alih2
+    kepakai position_monitor): Telegram nempelin LINK PREVIEW/baris tambahan
+    ke `text` kalau pesan mengandung URL atau pesan multi-baris (mis. user
+    paste "/start <pool_address>" lalu enter/paste link DexScreener di baris
+    berikutnya). `_CMD_RE` lama pakai anchor `$` yg di mode non-MULTILINE
+    HARUS reach absolute end-of-string, padahal `.` tak match `\n` --
+    begitu ada BARIS KEDUA apa pun, seluruh match GAGAL diam2 (bukan raise
+    error), balik None, lalu teks itu jatuh ke jalur _MINT_RE lama (nemu
+    mint di baris manapun) -> analyze_by_mint() salah kepanggil. Fix: cuma
+    parse BARIS PERTAMA thd command, abaikan baris sisanya.
+    """
+    first_line = text.strip().splitlines()[0] if text.strip() else ""
+    m = _CMD_RE.match(first_line)
     if not m:
         return None
     cmd = m.group(1).lower()
