@@ -1,0 +1,86 @@
+name: Meteora Position Monitor
+
+# Pantau LP yang SUDAH dipegang (trailing-stop TVL, Vol/TVL collapse, range
+# breach, authority/LP-lock berubah) -- BEDA dari scan.yml (screening
+# kandidat BARU). Cron TERPISAH + concurrency group TERPISAH supaya dua
+# proses ini tak saling tunggu/blokir (lihat position_monitor.py & monitor_state.py).
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {}
+
+concurrency:
+  group: meteora-monitor
+  cancel-in-progress: false
+
+permissions:
+  contents: write   # perlu untuk commit balik monitor_state.json
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install deps
+        run: pip install -r requirements.txt
+
+      - name: Run position monitor
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          HELIUS_API_KEY: ${{ secrets.HELIUS_API_KEY }}
+          GMGN_API_KEY: ${{ secrets.GMGN_API_KEY }}
+        run: python position_monitor.py
+
+      - name: Commit state (posisi + trailing-peak + offset Telegram)
+        # Pola commit-back SAMA PERSIS scan.yml (lihat catatan lengkap di
+        # sana) -- merge level-JSON (monitor_state.py, bukan git rebase/merge
+        # baris) supaya race antar-run tak diam2 kehilangan update.
+        run: |
+          git config user.name "meteora-bot"
+          git config user.email "bot@users.noreply.github.com"
+          if [[ -z "$(git status --porcelain monitor_state.json)" ]]; then
+            echo "state tidak berubah, tak ada commit"
+            exit 0
+          fi
+          cp monitor_state.json /tmp/monitor_state_local_snapshot.json
+          pushed=0
+          for i in 1 2 3 4 5 6 7 8; do
+            git fetch origin ${{ github.ref_name }}
+            # `|| true` WAJIB: run PERTAMA KALI monitor_state.json blm pernah
+            # ke-commit sama sekali -> checkout gagal (pathspec tak dikenal
+            # origin). Default shell run: GH Actions pakai `bash -e`, tanpa
+            # `|| true` step ini langsung abort di run pertama. Kalau gagal,
+            # working tree tetap snapshot lokal hasil run ini (aman -- lihat
+            # monitor_state.py merge(): remote kosong ya union-nya = lokal).
+            git checkout origin/${{ github.ref_name }} -- monitor_state.json || true
+            python monitor_state.py /tmp/monitor_state_local_snapshot.json
+            git add monitor_state.json
+            if git diff --cached --quiet; then
+              echo "state hasil merge sama dgn remote, tak perlu commit"
+              pushed=1
+              break
+            fi
+            git commit -m "chore(monitor-state): update posisi & alert history [skip ci]"
+            if git push origin HEAD:${{ github.ref_name }}; then
+              echo "state pushed (percobaan $i)"
+              pushed=1
+              break
+            fi
+            echo "push gagal (race dgn run lain), retry $i"
+            git reset --soft HEAD~1
+            sleep $((i*2))
+          done
+          if [[ "$pushed" -ne 1 ]]; then
+            echo "::warning::GAGAL total push monitor_state setelah 8 percobaan -- kontensi terlalu tinggi. Data run ini tak tersimpan, tapi run berikutnya tetap normal."
+          fi

@@ -137,3 +137,20 @@ def fetch_pool_by_mint(mint: str, max_search: int = 3000) -> Optional[Dict[str, 
         if pool["mint_x"] == mint or pool["mint_y"] == mint:
             return pool
     return None
+
+
+def fetch_pool_by_address(address: str, max_search: int = 3000) -> Optional[Dict[str, Any]]:
+    """
+    Cari SATU pool Meteora dari alamat POOL-nya sendiri (bukan mint token) --
+    dipakai position_monitor.py (/start <pool_address>). Sama pola dgn
+    fetch_pool_by_mint(): tak ada endpoint resmi "get pool by address"
+    terverifikasi di /pools (lihat catatan fetch_pool_by_mint), jadi pakai
+    fetch_pools() yg SUDAH terbukti jalan lalu cari address-nya di sisi
+    klien. Trade-off sama: pool volume sangat kecil di luar `max_search`
+    teratas tak akan ketemu.
+    """
+    pools = fetch_pools(max_search)
+    for pool in pools:
+        if pool["address"] == address:
+            return pool
+    return None
