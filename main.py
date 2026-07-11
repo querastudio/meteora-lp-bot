@@ -59,9 +59,18 @@ def run() -> int:
             log.exception("Error analisa manual mint %s: %s", req_mint, e)
 
     pools = meteora.fetch_pools(config.MAX_POOLS_PER_RUN)
+    # Fetch KEDUA terurut kebaruan (bukan volume) -- lihat catatan
+    # config.MAX_EXPENSIVE_CANDIDATES_NEWEST_RESERVED kenapa ini perlu.
+    # Digabung SEBELUM Stage 1 spy pool yg kebetulan muncul di kedua daftar
+    # tak dievaluasi 2x (dedup by address).
+    newest_pools = meteora.fetch_newest_pools(config.MAX_NEWEST_POOLS_FETCH)
+    seen_addrs = {p["address"] for p in pools}
+    pools = pools + [p for p in newest_pools if p["address"] not in seen_addrs]
     if not pools:
         log.warning("Tak ada pool dari Meteora, selesai.")
         return 0
+
+    newest_addrs = {p["address"] for p in newest_pools}
 
     # ---- STAGE 1: hard filter pool (murah, 0 call) ----
     stage1_pass: List[Dict[str, Any]] = []
@@ -73,8 +82,24 @@ def run() -> int:
         stage1_pass.append(pool)
     log.info("Stage 1: %d/%d pool lolos", len(stage1_pass), len(pools))
 
-    # Batasi kandidat mahal per run (hemat Helius rate limit & waktu cron).
-    candidates = stage1_pass[: config.MAX_EXPENSIVE_CANDIDATES]
+    # Batasi kandidat mahal per run (hemat Helius rate limit & waktu cron) --
+    # SLOT CADANGAN utk pool baru (newest_addrs) diisi DULUAN supaya tak
+    # kalah rebutan sama pool yg udah rame volume-nya, sisa budget baru diisi
+    # dari daftar volume seperti biasa (urutan stage1_pass asalnya volume-sorted
+    # duluan lalu newest-only-pools nyusul, jadi partition ini konsisten).
+    newest_candidates = [p for p in stage1_pass if p["address"] in newest_addrs][
+        : config.MAX_EXPENSIVE_CANDIDATES_NEWEST_RESERVED
+    ]
+    newest_candidate_addrs = {p["address"] for p in newest_candidates}
+    remaining_budget = config.MAX_EXPENSIVE_CANDIDATES - len(newest_candidates)
+    other_candidates = [p for p in stage1_pass if p["address"] not in newest_candidate_addrs][:remaining_budget]
+    candidates = newest_candidates + other_candidates
+    if newest_candidates:
+        log.info(
+            "%d slot dicadangkan utk pool baru (dari %d yg lolos S1): %s",
+            len(newest_candidates), sum(1 for p in stage1_pass if p["address"] in newest_addrs),
+            ", ".join(p.get("name", "?") for p in newest_candidates),
+        )
 
     sent = 0
     for pool in candidates:
