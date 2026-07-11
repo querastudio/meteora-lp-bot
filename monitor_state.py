@@ -168,22 +168,6 @@ def list_due_pools(state: Dict[str, Any], now: Optional[float] = None) -> List[T
 
 
 # ---------------------------------------------------------------------------
-# Offset polling Telegram getUpdates -- OFFSET SENDIRI, terpisah dari
-# state_data.json punya main.py (lihat sources/telegram_inbound.py:
-# poll_commands vs poll_new_mints). Position monitor ini workflow/cron
-# terpisah (monitor.yml) yg baca inbox Telegram yg SAMA scr independen --
-# masing2 py bookmark offset sendiri, saling abaikan pesan yg bukan urusannya
-# (command /start dst vs mint address polos) jadi tak saling ganggu.
-# ---------------------------------------------------------------------------
-def get_telegram_offset(state: Dict[str, Any]) -> int:
-    return int(state.get("telegram_offset", 0))
-
-
-def set_telegram_offset(state: Dict[str, Any], offset: int) -> None:
-    state["telegram_offset"] = offset
-
-
-# ---------------------------------------------------------------------------
 # Merge state (pola sama persis state.py -- lihat docstring di sana utk
 # alasan lengkap kenapa union-merge level-JSON, bukan git rebase/merge baris).
 # ---------------------------------------------------------------------------
@@ -224,9 +208,6 @@ def merge(remote: Dict[str, Any], local: Dict[str, Any]) -> Dict[str, Any]:
         merged_pool["last_alert_ts_by_type"] = merged_alerts
         merged_pools[addr] = merged_pool
     merged["pools"] = merged_pools
-    merged["telegram_offset"] = max(
-        int(remote.get("telegram_offset", 0)), int(local.get("telegram_offset", 0))
-    )
     return merged
 
 

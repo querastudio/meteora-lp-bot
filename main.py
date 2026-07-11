@@ -21,7 +21,9 @@ import sys
 from typing import Any, Dict, List, Optional
 
 import config
+import monitor_state
 import notify
+import position_monitor
 import scoring
 import state as state_mod
 from screening import hard_filters, holders, lp_quality, volatility
@@ -48,15 +50,25 @@ def run() -> int:
     sol_price = dexscreener.get_sol_price_usd()
     log.info("Harga SOL: $%.2f", sol_price)
 
-    # ---- Fitur "kirim CA, bot balas analisa" (on-demand, mint apa pun) ----
+    # ---- Fitur "kirim CA, bot balas analisa" (on-demand, mint apa pun) DAN
+    # command position-monitor (/start /stop /list /status) -- SATU poll
+    # Telegram saja di sini (lihat sources/telegram_inbound.py kenapa harus
+    # 1 konsumen: getUpdates Telegram cuma py 1 posisi konfirmasi GLOBAL per
+    # bot token, bukan per-consumer -- 2 poller independen dulu saling
+    # rebutan/salah makan pesan satu sama lain, command /start jadi raib).
     offset = state_mod.get_telegram_offset(st)
-    requested_mints, next_offset = telegram_inbound.poll_new_mints(offset)
+    requested_mints, commands, next_offset = telegram_inbound.poll_updates(offset)
     state_mod.set_telegram_offset(st, next_offset)
     for req_mint in dict.fromkeys(requested_mints):  # dedup, jaga urutan
         try:
             analyze_by_mint(req_mint, st, sol_price)
         except Exception as e:  # noqa: BLE001 — 1 permintaan error != crash run
             log.exception("Error analisa manual mint %s: %s", req_mint, e)
+
+    mst = monitor_state.load()
+    if commands:
+        position_monitor.handle_commands(mst, commands)
+        monitor_state.save(mst)
 
     pools = meteora.fetch_pools(config.MAX_POOLS_PER_RUN)
     # Fetch KEDUA terurut kebaruan (bukan volume) -- lihat catatan

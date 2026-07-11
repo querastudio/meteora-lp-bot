@@ -1,20 +1,35 @@
 """
-sources/telegram_inbound.py — Polling Telegram getUpdates utk 2 fitur beda:
+sources/telegram_inbound.py — Polling Telegram getUpdates, SATU konsumen SAJA
+(main.py/scan.yml) utk 2 fitur:
 
-  1. "kirim CA ke bot, bot balas analisa lengkap" (main.py, offset di
-     state_data.json) -- poll_new_mints().
-  2. "/start /stop /list /status" position monitor (position_monitor.py,
-     offset SENDIRI di monitor_state.json) -- poll_commands().
+  1. "kirim CA ke bot, bot balas analisa lengkap" (mint polos).
+  2. "/start /stop /list /status" position monitor (diteruskan ke
+     position_monitor.handle_commands() -- lihat main.py:run()).
 
-Kenapa DUA fungsi dgn offset TERPISAH, bukan satu: keduanya jalan dari
-WORKFLOW CRON BERBEDA (scan.yml vs monitor.yml), proses TERPISAH, tak bisa
-saling lihat memori masing2 -- masing2 py bookmark offset sendiri di file
-state sendiri. Keduanya scan INBOX YANG SAMA scr independen (masing2 lihat
-SEMUA pesan >= offset-nya sendiri), tapi masing2 cuma ambil yg relevan
-buatnya & abaikan sisanya (poll_new_mints skip teks berbentuk command spy
-"/start <mint> ..." tak ikut disalahartikan sbg "user paste mint polos utk
-dianalisa manual"; poll_commands cuma ambil teks berbentuk command, abaikan
-mint polos). Jadi tak ada cross-talk duplikat walau baca sumber sama.
+BUG NYATA (dilaporkan user, /start tak pernah dibalas position_monitor
+walau monitor.yml sudah ditrigger manual): awalnya modul ini py DUA fungsi
+poll TERPISAH dgn offset TERPISAH (poll_new_mints di state_data.json utk
+main.py, poll_commands di monitor_state.json utk position_monitor.py),
+dgn asumsi keduanya bisa scan inbox Telegram yg sama scr independen kayak
+2 pembaca beda buku. ASUMSI ITU SALAH -- getUpdates Telegram cuma py SATU
+posisi konfirmasi GLOBAL per bot token, bukan per-consumer/per-offset-
+tersimpan. Begitu SATU poller (scan.yml, yg jalan rutin tiap 5 menit)
+konfirmasi suatu update_id (panggilan kedua dgn offset lebih tinggi),
+Telegram BERHENTI TOTAL mengirim update itu ke SIAPA PUN -- termasuk
+monitor.yml yg offset tersimpannya sendiri msh lebih rendah & belum pernah
+"lihat" pesan itu dari sudut pandang file state-nya sendiri. Hasilnya:
+command /start dkk raib begitu saja krn keburu "dimakan" scan.yml (yg
+skip command dr ekstraksi mint, jd secara efektif membuang pesan itu)
+SEBELUM monitor.yml (yg cron-nya jg blm tentu jalan tepat waktu) sempat
+proses.
+
+FIX: SATU poller saja (poll_updates(), dipanggil main.py/scan.yml --
+cron paling reliable, sudah terverifikasi jalan rutin via investigasi
+log GHOSTI/TRIPLET 11 Juli 2026), py offset TUNGGAL (state_data.json).
+main.py meneruskan command hasil parse ke position_monitor.handle_commands()
+LANGSUNG dlm proses yg sama (import, bukan lewat Telegram lagi) --
+monitor.yml (cron terpisah) HANYA jalankan run_cycle() (evaluasi
+trigger pool yg sudah dipantau), TAK PERNAH poll Telegram sendiri lagi.
 
 Kenapa POLLING, bukan webhook: proyek ini sengaja 100% GitHub Actions cron +
 push-only Telegram (lihat README/config.py) -- tak ada server/endpoint HTTPS
@@ -49,8 +64,7 @@ _CMD_RE = re.compile(r"^/(start|stop|list|status)(?:@\w+)?(?:\s+(.*))?$", re.IGN
 
 def parse_command(text: str) -> Optional[Dict[str, Any]]:
     """Parse 1 baris pesan jadi {"cmd": "start"|"stop"|"list"|"status", "args": [...]}
-    atau None kalau bukan command yg dikenali. Diekspor (dipakai poll_new_mints
-    utk SKIP command dari ekstraksi mint, dan poll_commands utk ekstrak command).
+    atau None kalau bukan command yg dikenali.
 
     BUG NYATA (dilaporkan user, /start jatuh ke "analisa manual" alih2
     kepakai position_monitor): Telegram nempelin LINK PREVIEW/baris tambahan
@@ -72,27 +86,32 @@ def parse_command(text: str) -> Optional[Dict[str, Any]]:
     return {"cmd": cmd, "args": rest.split() if rest else []}
 
 
-def _fetch_authorized_texts(offset: int) -> Tuple[List[str], int]:
+def poll_updates(offset: int) -> Tuple[List[str], List[Dict[str, Any]], int]:
     """
-    Ambil teks pesan baru sejak `offset` dari chat pemilik yg sah SAJA.
-    Return (texts, next_offset) -- lihat poll_new_mints/poll_commands utk
-    gimana masing2 memparse `texts`.
+    SATU-SATUNYA fungsi yang boleh memanggil Telegram getUpdates dgn
+    konfirmasi offset (lihat docstring modul kenapa cuma boleh 1 konsumen).
+    Return (mints, commands, next_offset):
+      mints    = mint address polos (bukan command) dari chat yg sah, utk
+                 fitur "kirim CA, bot balas analisa".
+      commands = {"cmd": ..., "args": [...]} dari chat yg sah, diteruskan
+                 main.py ke position_monitor.handle_commands().
 
-    Degrade gracefully: gagal/API mati -> ([], offset) -- tak crash run,
+    Degrade gracefully: gagal/API mati -> ([], [], offset) -- tak crash run,
     cukup dicoba lagi run berikutnya.
 
-    BUG NYATA (dilaporkan user, spam notif $VLED berulang-ulang -- lihat git
-    history): getUpdates Telegram TAK menganggap pesan "sudah dibaca" hanya
-    krn kita LIHAT -- server Telegram baru betulan berhenti mengirim ulang
-    update itu setelah kita panggil getUpdates LAGI dgn offset LEBIH TINGGI.
-    Konfirmasi ini WAJIB terjadi DLM RUN YG SAMA (bukan nunggu next_offset
-    berhasil persist ke git run berikutnya -- push state bisa gagal krn
-    kontensi banyak run beruntun, lihat scan.yml/monitor.yml).
+    BUG NYATA LAMA (dilaporkan user, spam notif $VLED berulang-ulang):
+    getUpdates Telegram TAK menganggap pesan "sudah dibaca" hanya krn kita
+    LIHAT -- server Telegram baru betulan berhenti mengirim ulang update itu
+    setelah kita panggil getUpdates LAGI dgn offset LEBIH TINGGI. Konfirmasi
+    ini WAJIB terjadi DLM RUN YG SAMA (bukan nunggu next_offset berhasil
+    persist ke git run berikutnya -- push state bisa gagal krn kontensi
+    banyak run beruntun).
     """
-    texts: List[str] = []
+    mints: List[str] = []
+    commands: List[Dict[str, Any]] = []
     next_offset = offset
     if not config.TELEGRAM_BOT_TOKEN:
-        return texts, next_offset
+        return mints, commands, next_offset
     try:
         resp = http.get_json(
             TG_API.format(token=config.TELEGRAM_BOT_TOKEN),
@@ -100,7 +119,7 @@ def _fetch_authorized_texts(offset: int) -> Tuple[List[str], int]:
             timeout=config.HTTP_TIMEOUT,
         )
         if not resp or not resp.get("ok"):
-            return texts, next_offset
+            return mints, commands, next_offset
 
         for upd in resp.get("result", []):
             update_id = upd.get("update_id")
@@ -113,8 +132,18 @@ def _fetch_authorized_texts(offset: int) -> Tuple[List[str], int]:
                 continue  # bukan chat pemilik -- abaikan (cegah abuse)
 
             text = msg.get("text", "") or ""
-            if text:
-                texts.append(text)
+            if not text:
+                continue
+            cmd = parse_command(text)
+            if cmd:
+                commands.append(cmd)
+            else:
+                mints.extend(_MINT_RE.findall(text))
+
+        if mints:
+            log.info("Telegram: %d mint diminta utk analisa manual", len(mints))
+        if commands:
+            log.info("Telegram: %d command position-monitor diterima", len(commands))
 
         # KONFIRMASI KE TELEGRAM SEKARANG JUGA (dlm run yg sama) -- lihat
         # docstring atas. Panggilan kedua ini murah (limit=1, tak proses apa
@@ -131,43 +160,4 @@ def _fetch_authorized_texts(offset: int) -> Tuple[List[str], int]:
                 log.info("Konfirmasi offset Telegram gagal: %s (non-fatal)", e)
     except Exception as e:  # noqa: BLE001
         log.info("Polling Telegram getUpdates gagal: %s (degrade, coba lagi run berikutnya)", e)
-    return texts, next_offset
-
-
-def poll_new_mints(offset: int) -> Tuple[List[str], int]:
-    """
-    Return (mints, next_offset) -- mint address valid dari chat yang sah,
-    dipakai fitur "kirim CA, bot balas analisa" (main.py, offset di
-    state_data.json).
-
-    Teks berbentuk command (/start dst) DI-SKIP dari ekstraksi mint --
-    kalau tidak, pool_address di dalam "/start <pool_address> 15" bakal ikut
-    kena regex mint & salah-trigger analyze_by_mint() jg (base58 32-44 char
-    tak bisa dibedakan dari mint token cuma dari bentuknya).
-    """
-    texts, next_offset = _fetch_authorized_texts(offset)
-    mints: List[str] = []
-    for text in texts:
-        if parse_command(text) is not None:
-            continue
-        mints.extend(_MINT_RE.findall(text))
-    if mints:
-        log.info("Telegram: %d mint diminta utk analisa manual", len(mints))
-    return mints, next_offset
-
-
-def poll_commands(offset: int) -> Tuple[List[Dict[str, Any]], int]:
-    """
-    Return (commands, next_offset) -- command /start /stop /list /status dari
-    chat yang sah, dipakai position_monitor.py (offset SENDIRI di
-    monitor_state.json, lihat docstring modul).
-    """
-    texts, next_offset = _fetch_authorized_texts(offset)
-    commands: List[Dict[str, Any]] = []
-    for text in texts:
-        cmd = parse_command(text)
-        if cmd:
-            commands.append(cmd)
-    if commands:
-        log.info("Telegram: %d command position-monitor diterima", len(commands))
-    return commands, next_offset
+    return mints, commands, next_offset

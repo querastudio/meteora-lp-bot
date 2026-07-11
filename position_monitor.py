@@ -27,7 +27,7 @@ import config
 import monitor_state
 import notify
 from screening import hard_filters
-from sources import dexscreener, gmgn, helius, meteora, telegram_inbound
+from sources import dexscreener, gmgn, helius, meteora
 
 logging.basicConfig(
     level=logging.INFO,
@@ -393,17 +393,16 @@ def handle_commands(mst: Dict[str, Any], commands: List[Dict[str, Any]]) -> None
 
 # ---------------------------------------------------------------------------
 def run() -> int:
+    """
+    Dipanggil monitor.yml (cron TERPISAH dari scan.yml). HANYA jalankan
+    run_cycle() (evaluasi trigger pool yang sudah dipantau) -- TAK poll
+    Telegram sama sekali lagi (lihat sources/telegram_inbound.py kenapa:
+    command /start dst sekarang diproses main.py/scan.yml, SATU-SATUNYA
+    konsumen getUpdates, spy tak lagi rebutan konfirmasi sama scan.yml).
+    """
     log.info("=== Position monitor run mulai ===")
     mst = monitor_state.load()
-
-    offset = monitor_state.get_telegram_offset(mst)
-    commands, next_offset = telegram_inbound.poll_commands(offset)
-    monitor_state.set_telegram_offset(mst, next_offset)
-    if commands:
-        handle_commands(mst, commands)
-
     sent = run_cycle(mst)
-
     monitor_state.save(mst)
     log.info("=== Selesai. %d alert terkirim. ===", sent)
     return sent

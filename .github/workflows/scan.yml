@@ -122,3 +122,43 @@ jobs:
             # kehilangan 1 titik data history utk token yg diproses run ini.
             echo "::warning::GAGAL total push state setelah 8 percobaan -- kontensi terlalu tinggi (banyak run beruntun). Data run ini tak tersimpan, tapi run berikutnya tetap normal."
           fi
+
+      - name: Commit monitor state (command /start /stop /list /status)
+        if: ${{ inputs.mode != 'test_notify' }}
+        # main.py sekarang JUGA memproses command position-monitor (SATU-
+        # SATUNYA konsumen Telegram getUpdates -- lihat sources/telegram_inbound.py
+        # kenapa tak boleh dua poller independen), jadi monitor_state.json bisa
+        # berubah di sini juga (bukan cuma dari monitor.yml/run_cycle). Pola
+        # commit sama persis step di atas & monitor.yml (merge level-JSON).
+        run: |
+          git config user.name "meteora-bot"
+          git config user.email "bot@users.noreply.github.com"
+          if [[ -z "$(git status --porcelain monitor_state.json)" ]]; then
+            echo "monitor state tidak berubah, tak ada commit"
+            exit 0
+          fi
+          cp monitor_state.json /tmp/monitor_state_local_snapshot.json
+          pushed=0
+          for i in 1 2 3 4 5 6 7 8; do
+            git fetch origin ${{ github.ref_name }}
+            git checkout origin/${{ github.ref_name }} -- monitor_state.json || true
+            python monitor_state.py /tmp/monitor_state_local_snapshot.json
+            git add monitor_state.json
+            if git diff --cached --quiet; then
+              echo "monitor state hasil merge sama dgn remote, tak perlu commit"
+              pushed=1
+              break
+            fi
+            git commit -m "chore(monitor-state): update posisi dari command Telegram [skip ci]"
+            if git push origin HEAD:${{ github.ref_name }}; then
+              echo "monitor state pushed (percobaan $i)"
+              pushed=1
+              break
+            fi
+            echo "push gagal (race dgn run lain), retry $i"
+            git reset --soft HEAD~1
+            sleep $((i*2))
+          done
+          if [[ "$pushed" -ne 1 ]]; then
+            echo "::warning::GAGAL total push monitor_state setelah 8 percobaan -- kontensi terlalu tinggi. Data run ini tak tersimpan, tapi run berikutnya tetap normal."
+          fi
