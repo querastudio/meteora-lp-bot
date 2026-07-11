@@ -102,24 +102,59 @@ def _score_ath(ath_info: Dict[str, Any]) -> Tuple[str, str]:
     return "berbahaya", f"cuma {pct:.0f}% dari ATH tercatat ({ath_txt}) -- crash jauh dari puncak"
 
 
-def _score_volume(vol_organic: Dict[str, Any], jup: Dict[str, Any], top100: Dict[str, Any]) -> Tuple[str, str]:
+def _score_volume(
+    vol_organic: Dict[str, Any], jup: Dict[str, Any], top100: Dict[str, Any],
+    gm_volume: Dict[str, Any] = None,
+) -> Tuple[str, str]:
+    """
+    Momentum TERKINI (gm_volume, vol 5m vs rata2 1 jam) dipadukan ke pilar ini
+    (permintaan eksplisit user, 11 Juli 2026 -- kasus $GHOSTI): rasio
+    mcap:fee KUMULATIF bisa masih "sehat" persis di momen harga udah lewat
+    puncak & mulai turun (rasio itu dihitung dari fee SEPANJANG umur pool,
+    lambat berubah), padahal momentum 5 menit terakhir udah keliatan
+    ambruk -- notif yg cuma modal rasio kumulatif jadi kerasa "telat" krn
+    user baca BAGUS padahal momennya udah lewat. Momentum fading dipaksa
+    turunin tier ke KURANG walau rasio organik msh lolos, spy user langsung
+    liat sinyal "hati2, mgkn udah lewat puncak" di ringkasan.
+    """
     vol_organic = vol_organic or {}
     jup = jup or {}
     top100 = top100 or {}
+    gm_volume = gm_volume or {}
     wash = top100.get("wash_trader_pct", 0.0) if top100.get("available") else 0.0
     passed = vol_organic.get("pass", True)
     label = jup.get("organic_label") if jup.get("available") else None
     ratio = vol_organic.get("ratio_actual")
     ratio_txt = f"rasio mcap:fee {ratio:,.0f}:1" if ratio is not None else "rasio mcap:fee n/a"
+
+    momentum_txt = ""
+    momentum_fading = False
+    if gm_volume.get("available"):
+        v5 = gm_volume.get("volume_5m", 0.0)
+        v1h = gm_volume.get("volume_1h", 0.0)
+        avg_5m_dari_1h = v1h / 12.0 if v1h > 0 else 0.0
+        if avg_5m_dari_1h > 0:
+            mratio = v5 / avg_5m_dari_1h
+            if mratio <= 0.3:
+                momentum_txt = ", 📉 momentum turun tajam -- mgkn sudah lewat puncak"
+                momentum_fading = True
+            elif mratio <= 0.6:
+                momentum_txt = ", 📉 momentum melambat"
+                momentum_fading = True
+            elif mratio >= 1.5:
+                momentum_txt = ", 🚀 momentum naik"
+
     if wash >= 30:
         return "berbahaya", f"wash-trading terdeteksi tinggi ({wash:.0f}% top100)"
+    if momentum_fading:
+        return "kurang", f"{ratio_txt}{momentum_txt}"
     if not passed:
         return "kurang", f"{ratio_txt}, di luar target organik"
     if label == "high" and wash < 10:
-        return "bagus", f"Jupiter organic score tinggi, {ratio_txt}"
+        return "bagus", f"Jupiter organic score tinggi, {ratio_txt}{momentum_txt}"
     if label in ("high", "medium"):
-        return "lumayan", f"Jupiter organic score {label}, {ratio_txt}"
-    return "lumayan", ratio_txt
+        return "lumayan", f"Jupiter organic score {label}, {ratio_txt}{momentum_txt}"
+    return "lumayan", f"{ratio_txt}{momentum_txt}"
 
 
 def _score_narrative(nar: Dict[str, Any]):
@@ -205,7 +240,7 @@ def _pillar_lines(ctx: Dict[str, Any]) -> List[str]:
     pillars = [
         ("ATH (cetak rekor harga)", _score_ath(ctx.get("ath_info", {}))),
         ("Volume tinggi & organik", _score_volume(
-            ctx.get("vol_organic", {}), ctx.get("jupiter", {}), gm.get("top100", {})
+            ctx.get("vol_organic", {}), ctx.get("jupiter", {}), gm.get("top100", {}), gm.get("volume", {})
         )),
         ("Narasi hype & awet", _score_narrative(ctx.get("narrative", {}))),
         ("Komunitas organik & aktif", _score_community(ctx.get("narrative", {}), ctx.get("lunarcrush", {}))),

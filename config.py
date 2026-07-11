@@ -366,6 +366,20 @@ MAX_POOLS_PER_RUN = _env_int("MAX_POOLS_PER_RUN", 300)
 # timeout 10 menit workflow, tp kalau makin lambat lg, turunkan via env var
 # ini (tak perlu ubah kode).
 MAX_EXPENSIVE_CANDIDATES = _env_int("MAX_EXPENSIVE_CANDIDATES", 25)
+
+# --- Discovery pool BARU (permintaan eksplisit user, 11 Juli 2026) ---
+# Bug nyata: fetch_pools() default terurut volume_24h:desc -> pool baru
+# (volume msh ~0) KALAH ranking TERUS drpd pool yg udah rame, tak PERNAH
+# kebagian slot MAX_EXPENSIVE_CANDIDATES yg dibatasi (bukti log: $TRIPLET
+# tak pernah muncul sepanjang ~35 jam). Fix: fetch KEDUA (terurut kebaruan,
+# lihat meteora.fetch_newest_pools()) dgn slot CADANGAN sendiri di deep-check
+# budget, supaya pool baru dpt kesempatan dicek terlepas dari serame apa
+# pool lain saat itu. TIDAK melonggarkan gate keamanan/kualitas apa pun
+# (MIN_CUMULATIVE_FEE_SOL/MIN_MARKET_CAP_USD dst tetap sama) -- cuma
+# mastiin pool yg MEMENUHI gate itu tak kalah rebutan slot evaluasi.
+MAX_NEWEST_POOLS_FETCH = _env_int("MAX_NEWEST_POOLS_FETCH", 100)
+MAX_EXPENSIVE_CANDIDATES_NEWEST_RESERVED = _env_int("MAX_EXPENSIVE_CANDIDATES_NEWEST_RESERVED", 10)
+
 # Anti-spam: interval minimal (jam) sebelum re-notif token yang sama pada verdict sama.
 RENOTIFY_COOLDOWN_HOURS = _env_float("RENOTIFY_COOLDOWN_HOURS", 24.0)
 

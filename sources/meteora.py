@@ -74,9 +74,10 @@ def _rows_from(data: Any) -> List[Dict[str, Any]]:
     return []
 
 
-def fetch_pools(max_pools: int, page_size: int = 200) -> List[Dict[str, Any]]:
+def fetch_pools(max_pools: int, page_size: int = 200, sort_by: str = "volume_24h:desc") -> List[Dict[str, Any]]:
     """
-    Ambil pool DLMM Meteora ter-normalisasi (maks `max_pools`), terurut volume 24h.
+    Ambil pool DLMM Meteora ter-normalisasi (maks `max_pools`), default
+    terurut volume 24h (lihat fetch_newest_pools() utk terurut kebaruan).
 
     `page` di API ini 1-based. `page_size` di-cap 1000 oleh server.
     filter_by=is_blacklisted=false membuang pool yang sudah ditandai Meteora
@@ -92,7 +93,7 @@ def fetch_pools(max_pools: int, page_size: int = 200) -> List[Dict[str, Any]]:
             params={
                 "page": page,
                 "page_size": page_size,
-                "sort_by": "volume_24h:desc",
+                "sort_by": sort_by,
                 "filter_by": "is_blacklisted=false",
             },
         )
@@ -112,8 +113,47 @@ def fetch_pools(max_pools: int, page_size: int = 200) -> List[Dict[str, Any]]:
             break
         page += 1
 
-    log.info("Meteora: %d pool diambil", len(pools))
+    log.info("Meteora: %d pool diambil (sort_by=%s)", len(pools), sort_by)
     return pools
+
+
+# Kandidat nama field "urut dari yang paling baru dibuat" -- BELUM
+# terverifikasi resmi (docs Meteora 403 diakses dari sandbox sesi ini,
+# endpoint lama /pair/all_with_pagination jg pernah diam2 pensiun tanpa
+# ganti versi -- lihat catatan atas file). Coba berturut2, pakai yg PERTAMA
+# hasilnya non-kosong; SEMUA gagal -> degrade ke [] (fetch_pools() volume
+# biasa tetap jalan spt biasa, cuma newest-pool discovery yg skip run ini).
+_NEWEST_SORT_CANDIDATES = ["created_at:desc", "createdAt:desc", "activation_point:desc", "pool_created_at:desc"]
+
+
+def fetch_newest_pools(max_pools: int, page_size: int = 200) -> List[Dict[str, Any]]:
+    """
+    Ambil pool PALING BARU dibuat -- BEDA dari fetch_pools() (default
+    volume_24h:desc) yg jadi akar bug (dilaporkan user, 11 Juli 2026): pool
+    baru volume-nya masih ~0, KALAH ranking TERUS drpd pool yg udah rame,
+    jadi tak PERNAH kebagian slot MAX_EXPENSIVE_CANDIDATES yg dibatasi --
+    bukti nyata dari log: $TRIPLET tak pernah muncul sama sekali di log
+    manapun sepanjang ~35 jam (kalah rank volume terus), $GHOSTI baru lolos
+    gate mcap PAS harga sudah lewat puncak (bounce sesaat di atas $300rb
+    baru ke-notice, padahal sudah beberapa kali gagal sebelumnya).
+
+    Field sort_by di sini masih DUGAAN (lihat _NEWEST_SORT_CANDIDATES) --
+    log raw pair PERTAMA sekali biar bisa diverifikasi dari live run apakah
+    kandidat yg kepakai itu BENERAN ngurutin dari baru (bukan API diam2
+    ignore sort_by tak dikenal & balik urutan default-nya sendiri).
+    """
+    for sort_by in _NEWEST_SORT_CANDIDATES:
+        pools = fetch_pools(max_pools, page_size, sort_by=sort_by)
+        if pools:
+            log.info(
+                "Meteora newest-pool sort_by='%s' dipakai (%d pool). Cek log raw pair "
+                "pertama utk verifikasi ini beneran terurut kebaruan: %s",
+                sort_by, len(pools), str(pools[0].get("_raw"))[:600],
+            )
+            return pools
+        log.warning("Meteora newest-pool sort_by='%s' gagal/kosong, coba kandidat berikutnya", sort_by)
+    log.error("Meteora: SEMUA kandidat sort_by newest-pool gagal -- discovery pool baru TAK jalan run ini")
+    return []
 
 
 def fetch_pool_by_mint(mint: str, max_search: int = 3000) -> Optional[Dict[str, Any]]:
