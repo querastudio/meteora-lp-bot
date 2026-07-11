@@ -49,7 +49,7 @@
 "last_alert_ts_by_type": {
 "TVL_TRAILING_STOP": 1783805043.5941124
 },
-"last_check_ts": 1783805043.5941124,
+"last_check_ts": 1783805462.8772454,
 "lp_baseline_confirmed": true,
 "mint": "4ko5tSr5o3H4v1sFtjTSd9MPUW7yx5AFCpkNPoL6pump",
 "next_check_due_ts": 1783805343.5941124,
@@ -59,7 +59,7 @@
 "prior_mint_authority": null,
 "range_pct": 90.0,
 "security_baseline_confirmed": true,
-"stopped": false,
+"stopped": true,
 "symbol": "febu",
 "trail_percent": 15.0,
 "tvl_last": 154342.0130956592,
@@ -89,7 +89,7 @@
 "entry_tvl": 520472.63036680926,
 "last_alert_any_ts": 0.0,
 "last_alert_ts_by_type": {},
-"last_check_ts": 1783805043.5941124,
+"last_check_ts": 1783805462.3900998,
 "lp_baseline_confirmed": true,
 "mint": "J8PSdNP3QewKq2Z1JJJFDMaqF7KcaiJhR7gbr5KZpump",
 "next_check_due_ts": 1783805643.5941124,
@@ -99,7 +99,7 @@
 "prior_mint_authority": null,
 "range_pct": 90.0,
 "security_baseline_confirmed": true,
-"stopped": false,
+"stopped": true,
 "symbol": "TripleT",
 "trail_percent": 15.0,
 "tvl_last": 534513.6123123873,
@@ -190,5 +190,5 @@
 }
 },
 "telegram_offset": 0,
-"updated_at": 1783805073.3543818
+"updated_at": 1783805479.2814457
 }
