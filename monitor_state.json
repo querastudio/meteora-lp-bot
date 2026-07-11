@@ -1,5 +1,35 @@
 {
-"pools": {},
+"pools": {
+"6kbEH79zCW3R4w6DCNvZoPMBkLWQPgfaoD1jveiKwXAB": {
+"chat_id": "7364538923",
+"consecutive": {
+"composite": 0,
+"tvl_stop": 0,
+"voltvl": 0
+},
+"entry_price": 0.0005672,
+"entry_time": 1783761342.5743954,
+"entry_tvl": 3677.560530442489,
+"last_alert_any_ts": 0.0,
+"last_alert_ts_by_type": {},
+"last_check_ts": 1783761342.5743954,
+"lp_baseline_confirmed": true,
+"mint": "6xCtR2Eq1VumsoRdNutcfSQfLMk7xUa2BrMx18tqpump",
+"next_check_due_ts": 1783761342.5743954,
+"pool_name": "DEXBULL-SOL",
+"prior_freeze_authority": null,
+"prior_lp_locked": true,
+"prior_mint_authority": null,
+"range_pct": 90.0,
+"security_baseline_confirmed": true,
+"stopped": false,
+"symbol": "DEXBULL",
+"trail_percent": 15.0,
+"tvl_last": 3677.560530442489,
+"tvl_peak": 3677.560530442489,
+"voltvl_history": []
+}
+},
 "telegram_offset": 0,
-"updated_at": 1783760943.672434
+"updated_at": 1783761357.7079332
 }
