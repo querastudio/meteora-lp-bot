@@ -14,7 +14,7 @@
 "last_alert_ts_by_type": {
 "TVL_TRAILING_STOP": 1783773428.200916
 },
-"last_check_ts": 1783773428.200916,
+"last_check_ts": 1783774530.93237,
 "lp_baseline_confirmed": true,
 "mint": "BtUiqGdsW3H47yvtyKSLhQfzVpwov3wyYY6qssU9pump",
 "next_check_due_ts": 1783773728.200916,
@@ -24,7 +24,7 @@
 "prior_mint_authority": null,
 "range_pct": 90.0,
 "security_baseline_confirmed": true,
-"stopped": false,
+"stopped": true,
 "symbol": "reptilecoin",
 "trail_percent": 15.0,
 "tvl_last": 30606.679940603102,
@@ -165,5 +165,5 @@
 }
 },
 "telegram_offset": 0,
-"updated_at": 1783773462.304608
+"updated_at": 1783774547.4945776
 }
