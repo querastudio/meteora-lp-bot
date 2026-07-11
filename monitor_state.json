@@ -45,14 +45,14 @@
 "entry_price": 0.005536,
 "entry_time": 1783761664.5216732,
 "entry_tvl": 255539.01256665812,
-"last_alert_any_ts": 1783801601.278522,
+"last_alert_any_ts": 1783805043.5941124,
 "last_alert_ts_by_type": {
-"TVL_TRAILING_STOP": 1783801601.278522
+"TVL_TRAILING_STOP": 1783805043.5941124
 },
-"last_check_ts": 1783801601.278522,
+"last_check_ts": 1783805043.5941124,
 "lp_baseline_confirmed": true,
 "mint": "4ko5tSr5o3H4v1sFtjTSd9MPUW7yx5AFCpkNPoL6pump",
-"next_check_due_ts": 1783801901.278522,
+"next_check_due_ts": 1783805343.5941124,
 "pool_name": "febu-SOL",
 "prior_freeze_authority": null,
 "prior_lp_locked": true,
@@ -62,7 +62,7 @@
 "stopped": false,
 "symbol": "febu",
 "trail_percent": 15.0,
-"tvl_last": 185166.2963528509,
+"tvl_last": 154342.0130956592,
 "tvl_peak": 272121.70069598255,
 "voltvl_history": [
 0.7745400907465241,
@@ -73,7 +73,8 @@
 2.607515677025171,
 1.6371030673526132,
 6.375243595850996,
-9.021201623976163
+9.021201623976163,
+7.024388959706924
 ]
 },
 "3WY9N19nTtPSqrbWTeaFn2HfJ9MfdyLRSrRvy97GnDgY": {
@@ -88,10 +89,10 @@
 "entry_tvl": 520472.63036680926,
 "last_alert_any_ts": 0.0,
 "last_alert_ts_by_type": {},
-"last_check_ts": 1783801601.278522,
+"last_check_ts": 1783805043.5941124,
 "lp_baseline_confirmed": true,
 "mint": "J8PSdNP3QewKq2Z1JJJFDMaqF7KcaiJhR7gbr5KZpump",
-"next_check_due_ts": 1783802201.278522,
+"next_check_due_ts": 1783805643.5941124,
 "pool_name": "TripleT-SOL",
 "prior_freeze_authority": null,
 "prior_lp_locked": true,
@@ -101,7 +102,7 @@
 "stopped": false,
 "symbol": "TripleT",
 "trail_percent": 15.0,
-"tvl_last": 536455.9736424248,
+"tvl_last": 534513.6123123873,
 "tvl_peak": 556691.205296153,
 "voltvl_history": [
 0.03888107828053637,
@@ -112,7 +113,8 @@
 0.18077933313134706,
 0.03635910315047766,
 0.06890917897782901,
-0.07665192215780754
+0.07665192215780754,
+0.07929827809152318
 ]
 },
 "6kbEH79zCW3R4w6DCNvZoPMBkLWQPgfaoD1jveiKwXAB": {
@@ -154,14 +156,14 @@
 "entry_price": 0.0006402,
 "entry_time": 1783761683.5709524,
 "entry_tvl": 63647.47663785048,
-"last_alert_any_ts": 1783801601.278522,
+"last_alert_any_ts": 1783805043.5941124,
 "last_alert_ts_by_type": {
-"TVL_TRAILING_STOP": 1783801601.278522
+"TVL_TRAILING_STOP": 1783805043.5941124
 },
-"last_check_ts": 1783801601.278522,
+"last_check_ts": 1783805043.5941124,
 "lp_baseline_confirmed": true,
 "mint": "CgnQ8a1u99Gk7qoySMd2wrGPMPm9bdcSJNhqMEkYpump",
-"next_check_due_ts": 1783801901.278522,
+"next_check_due_ts": 1783805343.5941124,
 "pool_name": "Loom-SOL",
 "prior_freeze_authority": null,
 "prior_lp_locked": true,
@@ -171,7 +173,7 @@
 "stopped": false,
 "symbol": "Loom",
 "trail_percent": 15.0,
-"tvl_last": 58001.99089866984,
+"tvl_last": 63200.0212445353,
 "tvl_peak": 99719.4105164042,
 "voltvl_history": [
 3.549598173730082,
@@ -182,10 +184,11 @@
 1.3749687054171653,
 1.445926054757785,
 0.7519136133743298,
-0.8119578252837185
+0.8119578252837185,
+1.1076899338613306
 ]
 }
 },
 "telegram_offset": 0,
-"updated_at": 1783801626.395486
+"updated_at": 1783805073.3543818
 }
