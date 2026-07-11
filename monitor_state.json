@@ -156,14 +156,14 @@
 "entry_price": 0.0006402,
 "entry_time": 1783761683.5709524,
 "entry_tvl": 63647.47663785048,
-"last_alert_any_ts": 1783808049.5716088,
+"last_alert_any_ts": 1783811606.768817,
 "last_alert_ts_by_type": {
-"TVL_TRAILING_STOP": 1783808049.5716088
+"TVL_TRAILING_STOP": 1783811606.768817
 },
-"last_check_ts": 1783808049.5716088,
+"last_check_ts": 1783811606.768817,
 "lp_baseline_confirmed": true,
 "mint": "CgnQ8a1u99Gk7qoySMd2wrGPMPm9bdcSJNhqMEkYpump",
-"next_check_due_ts": 1783808349.5716088,
+"next_check_due_ts": 1783811906.768817,
 "pool_name": "Loom-SOL",
 "prior_freeze_authority": null,
 "prior_lp_locked": true,
@@ -173,7 +173,7 @@
 "stopped": false,
 "symbol": "Loom",
 "trail_percent": 15.0,
-"tvl_last": 56920.639201936894,
+"tvl_last": 49649.81607452111,
 "tvl_peak": 99719.4105164042,
 "voltvl_history": [
 3.549598173730082,
@@ -186,10 +186,11 @@
 0.7519136133743298,
 0.8119578252837185,
 1.1076899338613306,
-0.7807101998386878
+0.7807101998386878,
+0.7889917118350138
 ]
 }
 },
 "telegram_offset": 0,
-"updated_at": 1783808069.2985635
+"updated_at": 1783811619.982863
 }
