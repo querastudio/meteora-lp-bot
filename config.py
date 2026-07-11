@@ -378,3 +378,55 @@ STATE_FILE = os.getenv("STATE_FILE", "state_data.json")
 
 # Mint SOL untuk konversi harga.
 SOL_MINT = "So11111111111111111111111111111111111111112"
+
+
+# ---------------------------------------------------------------------------
+# POSITION MONITOR — /start /stop /list /status (pantau LP yg SUDAH dipegang,
+# beda dari pipeline di atas yg screening kandidat BARU). File state terpisah
+# krn skema & siklus hidupnya beda total dari state_data.json (per-pool posisi
+# aktif, bukan per-token riwayat harga screening).
+# ---------------------------------------------------------------------------
+MONITOR_STATE_FILE = os.getenv("MONITOR_STATE_FILE", "monitor_state.json")
+MONITOR_DEFAULT_TRAIL_PCT = _env_float("MONITOR_DEFAULT_TRAIL_PCT", 15.0)
+
+# Interval polling adaptif per pool (menit) -- makin baru posisi, makin sering
+# dicek (risiko rug tertinggi di jam2 pertama). Cron sendiri tetap jalan tiap
+# 5 menit (batas minimum GH Actions); interval di bawah ini dicapai dgn
+# SKIP pool yg belum jatuh tempo cek-nya (lihat position_monitor.py), bukan
+# dgn banyak jadwal cron terpisah.
+MONITOR_POLL_MIN_UNDER_1H = _env_int("MONITOR_POLL_MIN_UNDER_1H", 5)
+MONITOR_POLL_MIN_1H_TO_24H = _env_int("MONITOR_POLL_MIN_1H_TO_24H", 10)
+MONITOR_POLL_MIN_OVER_24H = _env_int("MONITOR_POLL_MIN_OVER_24H", 15)
+# Begitu ADA alert (fast/slow) dlm 1 jam terakhir -> balik ke interval
+# tersering sampai stabil (tak ada trigger baru) 1 jam penuh.
+MONITOR_POLL_MIN_AFTER_ALERT = _env_int("MONITOR_POLL_MIN_AFTER_ALERT", 5)
+MONITOR_ALERT_COOLDOWN_STABLE_HOURS = _env_float("MONITOR_ALERT_COOLDOWN_STABLE_HOURS", 1.0)
+
+# Trigger 1 (TVL trailing stop): butuh N cek BERTURUT di bawah stop_level
+# sblm alert (redam noise) -- KECUALI pola fast-rug (lihat di bawah).
+MONITOR_TVL_STOP_CONFIRM_CYCLES = _env_int("MONITOR_TVL_STOP_CONFIRM_CYCLES", 3)
+# Trigger 2 (Vol/TVL collapse alone) & Trigger 3 (composite slow rug) --
+# jg butuh konfirmasi N cek berturut, redam noise pola gradual.
+MONITOR_VOLTVL_CONFIRM_CYCLES = _env_int("MONITOR_VOLTVL_CONFIRM_CYCLES", 3)
+MONITOR_COMPOSITE_CONFIRM_CYCLES = _env_int("MONITOR_COMPOSITE_CONFIRM_CYCLES", 3)
+# Vol/TVL dianggap "collapse" kalau rasio SEKARANG < ini x rata2 rolling-nya.
+MONITOR_VOLTVL_COLLAPSE_RATIO = _env_float("MONITOR_VOLTVL_COLLAPSE_RATIO", 0.5)
+
+# FAST RUG override (trigger 1): trail_percent KECIL (pool masih sangat baru,
+# risiko tertinggi) + penurunan TAJAM dlm 1 SIKLUS -> alert LANGSUNG, skip
+# konfirmasi 3-siklus (kalau nunggu, keburu rugi lebih dalam).
+MONITOR_FAST_RUG_MAX_TRAIL_PCT = _env_float("MONITOR_FAST_RUG_MAX_TRAIL_PCT", 15.0)
+MONITOR_FAST_RUG_SINGLE_CYCLE_DROP_PCT = _env_float("MONITOR_FAST_RUG_SINGLE_CYCLE_DROP_PCT", 20.0)
+
+# Trigger 4 (range breach): kita HANYA punya pool_address (bukan alamat posisi
+# NFT DLMM spesifik user), jadi "keluar range" diaproksimasi dari seberapa
+# jauh harga bergerak dari entry_price -- BUKAN bin range asli user (perlu
+# posisi NFT on-chain utk itu, di luar scope saat ini). Default 90% selaras
+# filosofi LP pasif proyek ini sendiri (lihat docstring atas file: "range
+# -90%, pasang-dan-lupakan") -- override per-pool via argumen ke-3 /start
+# kalau strategi user beda dari default.
+MONITOR_DEFAULT_RANGE_PCT = _env_float("MONITOR_DEFAULT_RANGE_PCT", 90.0)
+
+# Anti-spam: jangan kirim ulang alert TYPE yg sama utk pool yg sama dlm N
+# menit -- KECUALI CRITICAL (authority/LP integrity), itu SELALU kirim.
+MONITOR_ALERT_DEDUP_MINUTES = _env_int("MONITOR_ALERT_DEDUP_MINUTES", 30)

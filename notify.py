@@ -10,6 +10,7 @@ Pesan pakai HTML parse mode Telegram (aman & rapi di mobile).
 
 import html
 import logging
+import time
 from typing import Any, Dict, List, Tuple
 from urllib.parse import quote_plus
 
@@ -647,6 +648,151 @@ def format_manual_message(ctx: Dict[str, Any]) -> str:
     row = " | ".join(_link(k, links[k]) for k in order if k in links)
     lines.append(row)
 
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Format pesan POSITION MONITOR (/start /stop /list /status -- lihat
+# position_monitor.py). Alert TYPE di sini adalah string literal yg SAMA
+# persis dgn konstanta ALERT_* di position_monitor.py (tak diimpor langsung
+# krn position_monitor.py sendiri import notify -- circular import).
+# ---------------------------------------------------------------------------
+_ALERT_TITLES = {
+    "TVL_TRAILING_STOP": "TVL TRAILING STOP",
+    "VOLTVL_COLLAPSE": "VOLUME/TVL COLLAPSING",
+    "SLOW_RUG_COMPOSITE": "POSSIBLE SLOW RUG",
+    "RANGE_BREACH": "PRICE OUT OF RANGE",
+    "AUTHORITY_CHANGE": "MINT/FREEZE AUTHORITY BERUBAH",
+    "LP_INTEGRITY": "LP INTEGRITY BERUBAH",
+}
+_ALERT_ACTIONS = {
+    "TVL_TRAILING_STOP": "SL -- trailing stop TVL kena, pertimbangkan tarik LP",
+    "VOLTVL_COLLAPSE": "Waspada, volume mengering -- pertimbangkan TP sebagian",
+    "SLOW_RUG_COMPOSITE": "SL -- TVL turun & volume kering bersamaan, indikasi slow rug",
+    "RANGE_BREACH": "Rebalance posisi atau tunggu harga kembali ke range",
+    "AUTHORITY_CHANGE": "SL SEKARANG -- authority reaktif, risiko rug TINGGI",
+    "LP_INTEGRITY": "SL SEKARANG -- LP ter-unlock, risiko rug TINGGI",
+}
+
+
+def _fmt_duration(seconds: float) -> str:
+    seconds = max(0, int(seconds))
+    h, rem = divmod(seconds, 3600)
+    m = rem // 60
+    return f"{h}h {m}m"
+
+
+def _short_addr(addr: str) -> str:
+    return f"{addr[:4]}...{addr[-4:]}" if len(addr) > 10 else addr
+
+
+def format_position_alert(
+    pool_address: str, pool_state: Dict[str, Any], snap: Dict[str, Any], alert: Dict[str, Any],
+) -> str:
+    """Format alert sesuai spec: [TIER] [ALERT TYPE] - [Pool short address],
+    TVL/Vol-TVL/Price/Time-since-entry/Suggested-action, + baris tambahan
+    spesifik-alert (mis. besaran drop 1-siklus utk fast rug)."""
+    tier = alert["tier"]
+    alert_type = alert["type"]
+    title = _ALERT_TITLES.get(alert_type, alert_type)
+    action = _ALERT_ACTIONS.get(alert_type, "Cek manual")
+
+    tvl_now = snap.get("tvl_usd") if snap.get("pool_available") else None
+    tvl_peak = float(pool_state.get("tvl_peak", 0.0) or 0.0)
+    tvl_pct = ((tvl_now - tvl_peak) / tvl_peak * 100.0) if (tvl_now is not None and tvl_peak > 0) else 0.0
+
+    ratio_now = (snap["volume_1h"] / tvl_now) if (tvl_now and tvl_now > 0 and snap.get("volume_available")) else None
+    history = pool_state.get("voltvl_history") or []
+    ratio_avg = sum(history) / len(history) if history else None
+
+    entry_price = float(pool_state.get("entry_price", 0.0) or 0.0)
+    price_now = snap.get("price_usd") if snap.get("price_available") else None
+    range_pct = float(pool_state.get("range_pct", config.MONITOR_DEFAULT_RANGE_PCT))
+    in_range = None
+    if entry_price > 0 and price_now is not None:
+        in_range = price_now > entry_price * (1 - range_pct / 100.0)
+
+    age_txt = _fmt_duration(time.time() - float(pool_state.get("entry_time", time.time())))
+
+    lines = [f"🚨 <b>[{tier}] {title}</b> — ${html.escape(pool_state.get('symbol','?'))} ({_short_addr(pool_address)})"]
+    tvl_pct_txt = f", {tvl_pct:+.0f}%" if tvl_now is not None else ""
+    tvl_txt = f"${_h(tvl_now)}" if tvl_now is not None else "n/a"
+    lines.append(f"TVL: {tvl_txt} (peak: ${_h(tvl_peak)}{tvl_pct_txt})")
+    ratio_txt = f"{ratio_now:.2f}" if ratio_now is not None else "n/a"
+    avg_txt = f"{ratio_avg:.2f}" if ratio_avg is not None else "n/a"
+    lines.append(f"Vol/TVL (1j): {ratio_txt} (avg: {avg_txt})")
+    range_txt = "in-range ✅" if in_range else ("OUT-OF-RANGE ❌" if in_range is False else "n/a")
+    lines.append(f"Price: {range_txt}")
+    lines.append(f"Time since entry: {age_txt}")
+    for extra in alert.get("extra_lines", []):
+        lines.append(f"─ {html.escape(extra)}")
+    lines.append(f"Suggested action: {action}")
+    return "\n".join(lines)
+
+
+def format_position_list(pools: List[Tuple[str, Dict[str, Any]]]) -> str:
+    """/list -- status ringkas 1 baris per pool dari data TERSIMPAN (bukan
+    live fetch, biar cepat/murah -- utk cek live pakai /status)."""
+    if not pools:
+        return "Tak ada pool yang sedang dipantau."
+    now = time.time()
+    lines = ["📋 <b>Pool yang dipantau</b>"]
+    for addr, p in pools:
+        tvl_last = float(p.get("tvl_last", p.get("entry_tvl", 0.0)) or 0.0)
+        tvl_peak = float(p.get("tvl_peak", 0.0) or 0.0)
+        entry_tvl = float(p.get("entry_tvl", 0.0) or 0.0)
+        pct_vs_entry = ((tvl_last - entry_tvl) / entry_tvl * 100.0) if entry_tvl > 0 else 0.0
+        age_txt = _fmt_duration(now - float(p.get("entry_time", now)))
+        sym = html.escape(p.get("symbol", "?"))
+        lines.append(
+            f"─ ${sym} ({_short_addr(addr)}): TVL ${_h(tvl_last)} (peak ${_h(tvl_peak)}) | "
+            f"vs entry {pct_vs_entry:+.0f}% | umur {age_txt}"
+        )
+    return "\n".join(lines)
+
+
+def format_position_status(pool_address: str, pool_state: Dict[str, Any], snap: Dict[str, Any]) -> str:
+    """/status -- cek live on-demand, detail lengkap 1 pool."""
+    sym = html.escape(pool_state.get("symbol", "?"))
+    tvl_now = snap.get("tvl_usd") if snap.get("pool_available") else None
+    tvl_peak = float(pool_state.get("tvl_peak", 0.0) or 0.0)
+    trail_pct = float(pool_state.get("trail_percent", 0.0) or 0.0)
+    stop_level = tvl_peak * (1 - trail_pct / 100.0) if tvl_peak > 0 else 0.0
+
+    entry_price = float(pool_state.get("entry_price", 0.0) or 0.0)
+    price_now = snap.get("price_usd") if snap.get("price_available") else None
+    range_pct = float(pool_state.get("range_pct", config.MONITOR_DEFAULT_RANGE_PCT))
+    in_range = None
+    if entry_price > 0 and price_now is not None:
+        in_range = price_now > entry_price * (1 - range_pct / 100.0)
+
+    ratio_now = (
+        snap["volume_1h"] / tvl_now if (tvl_now and tvl_now > 0 and snap.get("volume_available")) else None
+    )
+    age_txt = _fmt_duration(time.time() - float(pool_state.get("entry_time", time.time())))
+
+    lines = [f"🔍 <b>Status ${sym}</b> ({_short_addr(pool_address)})"]
+    tvl_txt = f"${_h(tvl_now)}" if tvl_now is not None else "n/a"
+    lines.append(f"TVL: {tvl_txt} (peak ${_h(tvl_peak)}, stop-level ${_h(stop_level)} @ {trail_pct:.0f}%)")
+    lines.append(f"Vol/TVL (1j): {ratio_now:.2f}" if ratio_now is not None else "Vol/TVL: n/a")
+    if entry_price > 0:
+        price_txt = _fmt_price(price_now) if price_now is not None else "n/a"
+        range_txt = "✅ in-range" if in_range else ("❌ OUT-OF-RANGE" if in_range is False else "n/a")
+        lines.append(f"Harga: {price_txt} (entry {_fmt_price(entry_price)}) — {range_txt}")
+    if snap.get("lp_lock_available"):
+        lp_locked = snap.get("lp_locked")
+        lock_txt = "✅ terkunci" if lp_locked is True else ("❌ TIDAK terkunci" if lp_locked is False else "n/a")
+    else:
+        lock_txt = "n/a"
+    lines.append(f"LP-lock: {lock_txt}")
+    if snap.get("security_available"):
+        mint_txt = "✅ revoked" if snap.get("mint_authority") is None else f"⚠️ AKTIF ({snap['mint_authority']})"
+        freeze_txt = "✅ revoked" if snap.get("freeze_authority") is None else f"⚠️ AKTIF ({snap['freeze_authority']})"
+    else:
+        mint_txt = freeze_txt = "n/a"
+    lines.append(f"Mint authority: {mint_txt}")
+    lines.append(f"Freeze authority: {freeze_txt}")
+    lines.append(f"Time since entry: {age_txt}")
     return "\n".join(lines)
 
 
