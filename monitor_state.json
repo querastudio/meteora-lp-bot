@@ -160,7 +160,7 @@
 "last_alert_ts_by_type": {
 "TVL_TRAILING_STOP": 1783815209.0561798
 },
-"last_check_ts": 1783815209.0561798,
+"last_check_ts": 1783820443.3509536,
 "lp_baseline_confirmed": true,
 "mint": "CgnQ8a1u99Gk7qoySMd2wrGPMPm9bdcSJNhqMEkYpump",
 "next_check_due_ts": 1783815509.0561798,
@@ -170,7 +170,7 @@
 "prior_mint_authority": null,
 "range_pct": 90.0,
 "security_baseline_confirmed": true,
-"stopped": false,
+"stopped": true,
 "symbol": "Loom",
 "trail_percent": 15.0,
 "tvl_last": 51465.233546615586,
@@ -193,5 +193,5 @@
 }
 },
 "telegram_offset": 0,
-"updated_at": 1783815222.0483897
+"updated_at": 1783820460.4676473
 }
