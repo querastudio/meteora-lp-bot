@@ -58453,6 +58453,12 @@
 ],
 "symbol": "BABYANSEM"
 },
+"DRWnf86Z2MjdMGLq7LFSF875iK9Ajo94RVtjK4owpump": {
+"price_history": [
+0.0005254
+],
+"symbol": "trickshot"
+},
 "DShht9B8wCRe5t3oqdPB77PnjJbKxbYaZyuWpZQjbonk": {
 "ath": 0.0009932,
 "last_notified_ts": 1787363648.946539,
@@ -75856,7 +75862,7 @@
 "symbol": "EKM"
 },
 "GUmbtfjSZkybSFgPibBcvwExEBdXwewJHR5PkTjzpump": {
-"ath": 0.002803,
+"ath": 0.0037510317,
 "last_notified_ts": 1787535740.3193018,
 "last_verdict": "WATCH",
 "price_history": [
@@ -75967,7 +75973,9 @@
 0.002468,
 0.002468,
 0.002476,
-0.002476
+0.002476,
+0.002156,
+0.002156
 ],
 "symbol": "Morty"
 },
@@ -93529,5 +93537,5 @@
 "symbol": "ZINC"
 }
 },
-"updated_at": 1787571394.5406404
+"updated_at": 1787581295.019327
 }
