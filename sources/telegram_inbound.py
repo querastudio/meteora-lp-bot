@@ -57,14 +57,15 @@ TG_API = "https://api.telegram.org/bot{token}/getUpdates"
 # Mint address Solana: base58 (tanpa 0, O, I, l), 32-44 karakter.
 _MINT_RE = re.compile(r"\b[1-9A-HJ-NP-Za-km-z]{32,44}\b")
 
-# Command position-monitor: /start|/stop|/list|/status, boleh ada "@botname"
-# (Telegram nempelin ini otomatis di grup), argumen dipisah whitespace.
-_CMD_RE = re.compile(r"^/(start|stop|list|status)(?:@\w+)?(?:\s+(.*))?$", re.IGNORECASE)
+# Command position-monitor (/start /stop /list /status) + global pause/resume
+# (/pause /resume, permintaan eksplisit user) -- boleh ada "@botname" (Telegram
+# nempelin ini otomatis di grup), argumen dipisah whitespace.
+_CMD_RE = re.compile(r"^/(start|stop|list|status|pause|resume)(?:@\w+)?(?:\s+(.*))?$", re.IGNORECASE)
 
 
 def parse_command(text: str) -> Optional[Dict[str, Any]]:
-    """Parse 1 baris pesan jadi {"cmd": "start"|"stop"|"list"|"status", "args": [...]}
-    atau None kalau bukan command yg dikenali.
+    """Parse 1 baris pesan jadi {"cmd": "start"|"stop"|"list"|"status"|"pause"|"resume",
+    "args": [...]} atau None kalau bukan command yg dikenali.
 
     BUG NYATA (dilaporkan user, /start jatuh ke "analisa manual" alih2
     kepakai position_monitor): Telegram nempelin LINK PREVIEW/baris tambahan

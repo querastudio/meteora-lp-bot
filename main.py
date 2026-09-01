@@ -3,8 +3,13 @@ main.py — Orkestrasi pipeline cascade (Stage 1 -> 7).
 
 Alur per run (dipanggil cron GitHub Actions tiap 5 menit):
   0. Cek pesan Telegram baru -- fitur "kirim CA, bot balas analisa" on-demand
-     (lihat sources/telegram_inbound.py & analyze_by_mint di bawah). Delay
-     maks ~5 menit (polling di cron yang sama, bukan webhook -- no infra baru).
+     (lihat sources/telegram_inbound.py & analyze_by_mint di bawah) DAN
+     command position-monitor (/start /stop /list /status /pause /resume,
+     diteruskan ke position_monitor.handle_commands()). Delay maks ~5 menit
+     (polling di cron yang sama, bukan webhook -- no infra baru).
+  0.5. /pause aktif -> skip ke langkah terakhir (simpan state, selesai) --
+     analisa manual & command di atas TETAP sudah jalan, cuma pipeline
+     screening kandidat baru di bawah ini yg di-skip (lihat monitor_state.is_paused()).
   1. Load state (anti-duplikat + riwayat harga utk Stage 6) & harga SOL.
   2. Fetch pool Meteora, urut aktivitas.
   3. Cascade: Stage 1 (pool) -> Stage 2 (mcap) -> Stage 2.5 (volume organik
@@ -69,6 +74,16 @@ def run() -> int:
     if commands:
         position_monitor.handle_commands(mst, commands)
         monitor_state.save(mst)
+
+    # ---- /pause /resume (permintaan eksplisit user) -- cek SETELAH command
+    # diproses (bukan sebelum) spy /resume yg baru masuk run ini LANGSUNG
+    # efektif run ini juga, tak perlu nunggu tick cron berikutnya. Hanya
+    # pipeline OTOMATIS (screening kandidat baru) yg di-skip -- analisa
+    # manual & command lain di atas TETAP sudah jalan terlepas dari flag ini.
+    if monitor_state.is_paused(mst):
+        log.info("Bot sedang di-/pause, skip pipeline screening kandidat baru run ini.")
+        state_mod.save(st)
+        return 0
 
     pools = meteora.fetch_pools(config.MAX_POOLS_PER_RUN)
     # Fetch KEDUA terurut kebaruan (bukan volume) -- lihat catatan
