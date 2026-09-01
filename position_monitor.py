@@ -271,7 +271,15 @@ def _check_one_pool(addr: str, pool_state: Dict[str, Any], now: float) -> int:
 
 
 def run_cycle(mst: Dict[str, Any], now: Optional[float] = None) -> int:
-    """1 siklus cek semua pool yang jatuh tempo. Return jumlah alert terkirim."""
+    """1 siklus cek semua pool yang jatuh tempo. Return jumlah alert terkirim.
+
+    SKIP TOTAL kalau lagi /pause (permintaan eksplisit user) -- jalur
+    OTOMATIS/PASIF ini yg dipause, BUKAN command (/start dst tetap jalan
+    dari main.py terlepas dari flag ini, lihat monitor_state.is_paused()).
+    """
+    if monitor_state.is_paused(mst):
+        log.info("Position monitor sedang di-/pause, skip run_cycle() siklus ini.")
+        return 0
     now = now if now is not None else time.time()
     due = monitor_state.list_due_pools(mst, now)
     sent = 0
@@ -371,6 +379,29 @@ def handle_status(mst: Dict[str, Any], chat_id: str, args: List[str]) -> str:
     return notify.format_position_status(pool_address, pool_state, snap)
 
 
+def handle_pause(mst: Dict[str, Any]) -> str:
+    """Pause GLOBAL (permintaan eksplisit user) -- skip pipeline screening
+    kandidat baru (main.py) DAN run_cycle position-monitor (monitor.yml).
+    Analisa manual & command /start /stop /list /status TETAP jalan (lihat
+    catatan monitor_state.is_paused())."""
+    if monitor_state.is_paused(mst):
+        return "⏸️ Bot sudah dlm status pause."
+    monitor_state.set_paused(mst, True)
+    return (
+        "⏸️ <b>Bot di-pause</b> -- notifikasi otomatis (screening kandidat baru & "
+        "alert pool yang dipantau) berhenti sementara.\n"
+        "Analisa manual (kirim CA) & command /start /stop /list /status tetap jalan.\n"
+        "Kirim /resume kalau mau lanjut."
+    )
+
+
+def handle_resume(mst: Dict[str, Any]) -> str:
+    if not monitor_state.is_paused(mst):
+        return "▶️ Bot tidak sedang di-pause."
+    monitor_state.set_paused(mst, False)
+    return "▶️ <b>Bot dilanjutkan</b> -- notifikasi otomatis aktif lagi."
+
+
 def handle_commands(mst: Dict[str, Any], commands: List[Dict[str, Any]]) -> None:
     chat_id = config.TELEGRAM_CHAT_ID
     for cmd in commands:
@@ -383,6 +414,10 @@ def handle_commands(mst: Dict[str, Any], commands: List[Dict[str, Any]]) -> None
                 reply = handle_list(mst, chat_id)
             elif cmd["cmd"] == "status":
                 reply = handle_status(mst, chat_id, cmd["args"])
+            elif cmd["cmd"] == "pause":
+                reply = handle_pause(mst)
+            elif cmd["cmd"] == "resume":
+                reply = handle_resume(mst)
             else:
                 continue
             notify.send(reply)

@@ -29,6 +29,10 @@ Struktur file:
         "stopped": bool,             # soft-delete (union-merge tak bisa hapus key -- lihat merge())
      }, ...
   },
+  "paused": bool,              # global /pause /resume -- skip pipeline OTOMATIS
+                                # (screening & run_cycle), TAK pengaruhi command/
+                                # analisa manual -- lihat is_paused()/set_paused()
+  "paused_updated_ts": float,
   "updated_at": float
 }
 """
@@ -168,6 +172,23 @@ def list_due_pools(state: Dict[str, Any], now: Optional[float] = None) -> List[T
 
 
 # ---------------------------------------------------------------------------
+# Pause/resume GLOBAL (permintaan eksplisit user, /pause /resume) -- flag
+# TOP-LEVEL (bukan per-pool), dibaca main.py (skip pipeline screening kandidat
+# baru) DAN position_monitor.py (skip run_cycle -- evaluasi trigger pool yg
+# dipantau). SENGAJA cuma pause jalur OTOMATIS/PASIF: analisa manual (kirim
+# CA) & command /start /stop /list /status tetap jalan spt biasa walau lagi
+# paused -- user yg secara eksplisit minta sesuatu harus tetap dilayani.
+# ---------------------------------------------------------------------------
+def is_paused(state: Dict[str, Any]) -> bool:
+    return bool(state.get("paused", False))
+
+
+def set_paused(state: Dict[str, Any], paused: bool) -> None:
+    state["paused"] = paused
+    state["paused_updated_ts"] = time.time()
+
+
+# ---------------------------------------------------------------------------
 # Merge state (pola sama persis state.py -- lihat docstring di sana utk
 # alasan lengkap kenapa union-merge level-JSON, bukan git rebase/merge baris).
 # ---------------------------------------------------------------------------
@@ -178,9 +199,16 @@ def merge(remote: Dict[str, Any], local: Dict[str, Any]) -> Dict[str, Any]:
     apa adanya. Pool yg disentuh KEDUA sisi (jarang) -> sisi dgn
     last_check_ts TERBARU jadi basis (itu yg beneran ngecek live data run
     ini), tapi tvl_peak & stopped tetap digabung terpisah spy TAK PERNAH
-    "mundur" (peak turun / stop ke-undo) akibat race.
+    "mundur" (peak turun / stop ke-undo) akibat race. Flag paused ikut
+    logika "timestamp terbaru menang" (paused_updated_ts) -- bukan OR/AND,
+    krn /pause & /resume harus bisa saling menimpa (bukan cuma satu arah).
     """
     merged = dict(remote)
+    remote_paused_ts = float(remote.get("paused_updated_ts", 0) or 0)
+    local_paused_ts = float(local.get("paused_updated_ts", 0) or 0)
+    if local_paused_ts >= remote_paused_ts and "paused" in local:
+        merged["paused"] = local.get("paused", False)
+        merged["paused_updated_ts"] = local_paused_ts
     merged_pools: Dict[str, Any] = dict(remote.get("pools", {}))
     for addr, local_pool in (local.get("pools") or {}).items():
         remote_pool = merged_pools.get(addr)
