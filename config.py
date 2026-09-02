@@ -44,6 +44,11 @@ def _env_bool(key: str, default: bool) -> bool:
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 HELIUS_API_KEY = os.getenv("HELIUS_API_KEY", "")
+# Fallback RPC (opsional, permintaan user 2 Sep -- hemat kuota Helius): kalau
+# Helius gagal/key tak valid/kosong, sources/helius.py otomatis coba Alchemy
+# Solana RPC. Sign up gratis di alchemy.com -> buat app "Solana Mainnet" ->
+# salin API key (BUKAN url lengkap, cuma bagian key-nya).
+ALCHEMY_API_KEY = os.getenv("ALCHEMY_API_KEY", "")
 YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY", "")  # opsional (Stage 7)
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")     # opsional (sintesis narasi AI)
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")         # opsional (fallback sintesis narasi AI)

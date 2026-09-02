@@ -1,5 +1,5 @@
 """
-sources/helius.py — Data on-chain via Helius RPC/DAS (free tier).
+sources/helius.py — Data on-chain via RPC/DAS, Helius UTAMA + Alchemy FALLBACK.
 
 Dipakai untuk:
   Stage 3 (keamanan kontrak):
@@ -9,11 +9,25 @@ Dipakai untuk:
     - getSignaturesForAddress -> umur/aktivitas wallet (deteksi fresh wallet)
     - getBalance -> saldo SOL wallet (deteksi wallet kosong)
 
-Semua panggilan lewat JSON-RPC ke:
-  https://mainnet.helius-rpc.com/?api-key=<KEY>
+FALLBACK KE ALCHEMY (permintaan user 2 Sep -- hemat kuota gratis Helius):
+`_rpc()` coba tiap URL di `_rpc_urls()` BERURUTAN, Helius dulu (baris paling
+sering kena rate limit di run ramai), berhenti di provider PERTAMA yg balas
+"result" valid. Kalau Helius gagal (key kosong/invalid/401, rate limit abis
+retry di http.py, atau timeout), otomatis lanjut ke Alchemy TANPA perlu ganti
+kode di pemanggil (holders.py, main.py, dst tetap panggil helius.get_*()
+seperti biasa). `getAsset` (DAS) SECARA HISTORIS cuma Helius, tapi Alchemy
+sudah adopsi spec DAS yg sama (method JSON-RPC sama persis) -- kalau ternyata
+provider tak dukung, balasannya cuma error/None spt provider mati biasa,
+degrade sama (get_security_info() sudah TAK bergantung mutlak pada getAsset,
+lihat catatan di sana).
 
-Semua fungsi degrade gracefully: return None / struktur kosong bila key tak ada
-atau API mati, supaya pipeline tetap jalan (dan menandai ⚠️ ketimbang crash).
+Semua panggilan lewat JSON-RPC ke:
+  https://mainnet.helius-rpc.com/?api-key=<HELIUS_API_KEY>
+  https://solana-mainnet.g.alchemy.com/v2/<ALCHEMY_API_KEY>
+
+Semua fungsi degrade gracefully: return None / struktur kosong bila KEDUA key
+tak ada atau KEDUA provider mati, supaya pipeline tetap jalan (dan menandai
+⚠️ ketimbang crash).
 """
 
 import logging
@@ -27,25 +41,42 @@ log = logging.getLogger("helius")
 LAMPORTS_PER_SOL = 1_000_000_000
 
 
-def _rpc_url() -> Optional[str]:
-    if not config.HELIUS_API_KEY:
-        return None
-    return f"https://mainnet.helius-rpc.com/?api-key={config.HELIUS_API_KEY}"
+def _rpc_urls() -> List[str]:
+    """Daftar URL provider RPC yg dicoba berurutan (Helius dulu -- lihat
+    docstring modul), skip yg key-nya kosong."""
+    urls = []
+    if config.HELIUS_API_KEY:
+        urls.append(f"https://mainnet.helius-rpc.com/?api-key={config.HELIUS_API_KEY}")
+    if config.ALCHEMY_API_KEY:
+        urls.append(f"https://solana-mainnet.g.alchemy.com/v2/{config.ALCHEMY_API_KEY}")
+    return urls
+
+
+def _host_of(url: str) -> str:
+    try:
+        return url.split("/")[2]
+    except IndexError:
+        return url
 
 
 def _rpc(method: str, params: Any) -> Optional[Any]:
-    """Panggilan JSON-RPC generik. Return 'result' atau None."""
-    url = _rpc_url()
-    if not url:
-        log.warning("HELIUS_API_KEY kosong -> lewati %s", method)
+    """Panggilan JSON-RPC generik, coba tiap provider di _rpc_urls() sampai
+    salah satu balas 'result' valid. Return 'result' atau None (KEDUA
+    provider gagal/kosong key)."""
+    urls = _rpc_urls()
+    if not urls:
+        log.warning("HELIUS_API_KEY & ALCHEMY_API_KEY kosong -> lewati %s", method)
         return None
     body = {"jsonrpc": "2.0", "id": "bot", "method": method, "params": params}
-    data = http.post_json(url, json_body=body)
-    if not data or "result" not in data:
+    for i, url in enumerate(urls):
+        data = http.post_json(url, json_body=body)
+        if data and "result" in data:
+            return data["result"]
         if data and "error" in data:
-            log.info("Helius %s error: %s", method, data["error"])
-        return None
-    return data["result"]
+            log.info("RPC %s (%s) error: %s", method, _host_of(url), data["error"])
+        if i < len(urls) - 1:
+            log.info("RPC %s gagal di %s, coba provider fallback berikutnya", method, _host_of(url))
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -62,23 +93,27 @@ def get_security_info(mint: str) -> Optional[Dict[str, Any]]:
         _available: bool              # apakah data berhasil diambil
       }
     """
+    # getAsset (DAS) BISA gagal sendirian tanpa berarti data tak tersedia
+    # sama sekali -- kalau provider aktif (mis. Alchemy) tak dukung DAS,
+    # getAccountInfo di bawah (RPC standar, didukung SEMUA provider) tetap
+    # bisa kasih mint/freeze authority. JANGAN early-return di sini cuma krn
+    # getAsset kosong -- baru dianggap "_available: False" kalau KEDUA call
+    # (getAsset & getAccountInfo) gagal, lihat pengecekan di bawah.
     result = _rpc("getAsset", {"id": mint})
-    if not result:
-        return {"_available": False}
-
-    # Struktur DAS: token_info berisi mint/freeze authority utk fungible.
-    token_info = result.get("token_info") or {}
+    token_info = (result or {}).get("token_info") or {}
     mint_auth = token_info.get("mint_authority")
     freeze_auth = token_info.get("freeze_authority")
 
-    # Deteksi Token-2022 + transfer fee via getAccountInfo (parsed) sebagai fallback,
-    # karena getAsset tak selalu ekspos extensions.
+    # Deteksi Token-2022 + transfer fee via getAccountInfo (parsed) -- juga
+    # sumber fallback utama mint/freeze authority kalau getAsset di atas gagal.
     is_2022 = False
     transfer_fee_bps = 0
     acc = _rpc(
         "getAccountInfo",
         [mint, {"encoding": "jsonParsed"}],
     )
+    if not result and not acc:
+        return {"_available": False}
     try:
         val = (acc or {}).get("value") or {}
         owner = val.get("owner", "")
