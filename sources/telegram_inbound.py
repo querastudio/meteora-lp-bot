@@ -120,6 +120,17 @@ def poll_updates(offset: int) -> Tuple[List[str], List[Dict[str, Any]], int]:
             timeout=config.HTTP_TIMEOUT,
         )
         if not resp or not resp.get("ok"):
+            # BUG NYATA (dilaporkan user, 2 Sep: /status /resume /status
+            # dikirim tp SAMA SEKALI tak ada balasan, telegram_offset di
+            # state_data.json macet 2+ jam tanpa berubah) -- jalur ini dulu
+            # SILENT TOTAL (return kosong tanpa log apa pun), jadi kegagalan
+            # getUpdates (mis. 401 token salah, ATAU 409 "Conflict: can't
+            # use getUpdates method while webhook is active" -- muncul kalau
+            # bot token ini PERNAH dipasangi webhook, mis. dari percobaan
+            # implementasi Node.js/lain di luar repo ini, & belum di-
+            # deleteWebhook) sama sekali tak kelihatan di log run mana pun.
+            # Log SEKARANG spy diagnosa cepat run berikutnya.
+            log.warning("Telegram getUpdates gagal/tak ok: %s", resp)
             return mints, commands, next_offset
 
         for upd in resp.get("result", []):
