@@ -34,6 +34,16 @@ jobs:
       - name: Install deps
         run: pip install -r requirements.txt
 
+      - name: Sync monitor_state.json terbaru (flag /pause bisa berubah setelah run ini di-antre)
+        # Sama persis alasannya spt di scan.yml (lihat komentar di sana) --
+        # actions/checkout pin ke sha SAAT DI-QUEUE, bukan saat job ini
+        # eksekusi. Run yg antre lama (backlog run numpuk) bisa checkout
+        # monitor_state.json versi lama (paused=false) walau /pause sudah
+        # ke-commit ke origin sebelum job ini akhirnya jalan.
+        run: |
+          git fetch origin ${{ github.ref_name }}
+          git checkout origin/${{ github.ref_name }} -- monitor_state.json || true
+
       - name: Run position monitor
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
