@@ -108,6 +108,14 @@ screening/
 1. Daftar di **[dev.helius.xyz](https://dev.helius.xyz)** (free tier cukup).
 2. Buat API key → salin. Ini `HELIUS_API_KEY`.
 
+### 2.5. (Opsional) Alchemy API Key — fallback RPC, hemat kuota Helius
+1. Daftar di **[alchemy.com](https://www.alchemy.com/)** (free tier cukup) → **Create new app**
+   → chain **Solana**, network **Mainnet**.
+2. Buka app-nya → **View Key** → salin bagian **API Key** saja (bukan url lengkap). Ini `ALCHEMY_API_KEY`.
+3. Kalau diisi, bot otomatis pakai Alchemy tiap kali Helius gagal/kena rate limit/key
+   invalid — tak perlu ganti kode apa pun. Kosongkan untuk skip (tetap jalan pakai
+   Helius saja seperti biasa).
+
 ### 3. (Opsional) YouTube Data API v3 Key — untuk Stage 7 narasi
 1. Buka **[Google Cloud Console](https://console.cloud.google.com/)** → buat project.
 2. **APIs & Services → Enable APIs** → aktifkan **YouTube Data API v3**.
@@ -124,6 +132,7 @@ Tambahkan:
 | `TELEGRAM_BOT_TOKEN` | ✅ | token dari BotFather |
 | `TELEGRAM_CHAT_ID` | ✅ | chat/channel id |
 | `HELIUS_API_KEY` | ✅ | key Helius |
+| `ALCHEMY_API_KEY` | ➖ | key Alchemy, fallback RPC kalau Helius gagal (opsional) |
 | `YOUTUBE_API_KEY` | ➖ | key YouTube (opsional) |
 
 (Opsional) override threshold via **Variables** (bukan Secrets), mis. `NARRATIVE_ENABLED=false`.
