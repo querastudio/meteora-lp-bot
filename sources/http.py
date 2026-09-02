@@ -91,9 +91,11 @@ _MIN_INTERVAL = {
     # rate-limit resmi yg kita pakai jadi aman lebih lambat.
     "lite-api.jup.ag": 0.5,
     "api.telegram.org": 0.3,
-    # GMGN OpenAPI (gratis) -- dokumentasi sebut ~20 req/detik sustained,
-    # jeda konservatif jauh di bawah itu.
-    "openapi.gmgn.ai": 0.2,
+    # GMGN OpenAPI (gratis) -- dokumentasi sebut ~20 req/detik sustained, tp
+    # LIVE terbukti (2 Sep) 0.2s tetap kena 429 "RATE_LIMIT_BANNED" berulang
+    # sepanjang run (bukan cuma soft-throttle sesaat) -- naikkan jauh lebih
+    # konservatif drpd klaim dokumentasi mereka, yg terbukti meleset.
+    "openapi.gmgn.ai": 1.0,
     # Coin Communities (backend chat pump.fun) -- rate limit per-business
     # (field rateLimitPerSecond) blm diketahui angka pastinya utk tier gratis,
     # jeda konservatif.
@@ -197,7 +199,27 @@ def request_json_with_status(
                 _bump_penalty(host)
             # Hormati Retry-After bila ada.
             retry_after = resp.headers.get("Retry-After")
-            if retry_after and retry_after.isdigit():
+            # BUG NYATA (dilaporkan user, 2 Sep: GMGN "RATE_LIMIT_BANNED" terus-
+            # terusan sepanjang run, notif kering 15+ jam krn ATH-freshness gate
+            # jadi selalu GMGN konfirmasi=False) -- GMGN balas 429 dgn body JSON
+            # berisi "reset_at" (epoch detik PASTI kapan ban lepas), TAPI kode
+            # lama abaikan itu & pakai exponential backoff generik (cuma
+            # ~1-3 detik) yg SELALU lebih pendek drpd sisa waktu ban -- retry
+            # jadi percuma (429 lagi), lalu kandidat BERIKUTNYA langsung nembak
+            # GMGN lagi & re-trigger ban yg sama, jadi ban efektif PERMANEN
+            # sepanjang run. Fix: parse reset_at dari body kalau ada, tidur
+            # PERSIS sampai waktu itu (dibatasi maks 30s spy tak nyangkut run).
+            reset_at_wait = None
+            try:
+                body_json = resp.json()
+                reset_at = body_json.get("reset_at") if isinstance(body_json, dict) else None
+                if reset_at:
+                    reset_at_wait = max(0.0, min(float(reset_at) - time.time(), 30.0))
+            except (ValueError, TypeError):
+                pass
+            if reset_at_wait is not None:
+                time.sleep(reset_at_wait)
+            elif retry_after and retry_after.isdigit():
                 time.sleep(min(int(retry_after), 30))
             else:
                 _sleep_backoff(attempt)
