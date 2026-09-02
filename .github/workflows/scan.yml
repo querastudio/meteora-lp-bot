@@ -42,6 +42,23 @@ jobs:
       - name: Install deps
         run: pip install -r requirements.txt
 
+      - name: Sync monitor_state.json terbaru (flag /pause bisa berubah setelah run ini di-antre)
+        # BUG NYATA (dilaporkan user, 1 Sep: "sudah saya /pause kok tetap muncul
+        # notif"): actions/checkout di atas pin ke github.sha SAAT RUN DI-QUEUE,
+        # BUKAN saat job ini benar2 mulai eksekusi. Kalau ada backlog run
+        # numpuk (terverifikasi ~16rb+ run workflow_dispatch antre), run yg
+        # di-queue SEBELUM user kirim /pause akan tetap checkout state LAMA
+        # (paused=false) walau /pause sudah lama ke-commit ke origin --
+        # main.py baca monitor_state.json dari snapshot checkout yg basi itu,
+        # is_paused() salah balik False, screening tetap jalan & kirim notif.
+        # Fix: SEBELUM main.py jalan, tarik ulang monitor_state.json PALING
+        # BARU dari origin -- pause/resume jadi efektif SEKETIKA di run
+        # manapun yg sedang eksekusi, terlepas seberapa lama run itu antre.
+        if: ${{ inputs.mode != 'test_notify' }}
+        run: |
+          git fetch origin ${{ github.ref_name }}
+          git checkout origin/${{ github.ref_name }} -- monitor_state.json || true
+
       - name: Run screening
         if: ${{ inputs.mode != 'test_notify' }}
         env:
